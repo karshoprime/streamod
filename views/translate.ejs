@@ -1,0 +1,598 @@
+<% layout('layout') -%>
+
+<%
+const languages = [
+  { code: 'en', name: 'English' },
+  { code: 'id', name: 'Indonesian' },
+  { code: 'ms', name: 'Malay' },
+  { code: 'th', name: 'Thai' },
+  { code: 'vi', name: 'Vietnamese' },
+
+  { code: 'ar', name: 'Arabic' },
+  { code: 'hi', name: 'Hindi' },
+  { code: 'bn', name: 'Bengali' },
+  { code: 'ur', name: 'Urdu' },
+
+  { code: 'fr', name: 'French' },
+  { code: 'de', name: 'German' },
+  { code: 'es', name: 'Spanish' },
+  { code: 'pt', name: 'Portuguese' },
+  { code: 'it', name: 'Italian' },
+  { code: 'nl', name: 'Dutch' },
+  { code: 'da', name: 'Danish' },
+  { code: 'cs', name: 'Czech' },
+  { code: 'ro', name: 'Romanian' },
+
+  { code: 'ru', name: 'Russian' },
+  { code: 'uk', name: 'Ukrainian' },
+  { code: 'pl', name: 'Polish' },
+  { code: 'tr', name: 'Turkish' },
+  { code: 'el', name: 'Greek' },
+  { code: 'hu', name: 'Hungarian' },
+
+  { code: 'zh', name: 'Chinese' },
+  { code: 'ja', name: 'Japanese' },
+  { code: 'ko', name: 'Korean' },
+
+  { code: 'sv', name: 'Swedish' },
+  { code: 'fi', name: 'Finnish' },
+  { code: 'no', name: 'Norwegian' },
+
+  { code: 'mi', name: 'Maori' }
+];
+%>
+
+<div class="space-y-6">
+
+  <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+    <div>
+      <h2 class="text-2xl font-bold">Translate</h2>
+      <p class="text-gray-400 text-sm mt-1">Manage YouTube video translations per channel</p>
+    </div>
+
+    <button
+      id="translateAllBtn"
+      type="button"
+      onclick="translateAllVideos()"
+      class="w-full md:w-auto inline-flex items-center justify-center gap-2 bg-primary hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+      <i class="ti ti-language"></i>
+      <span>Translate All</span>
+    </button>
+  </div>
+
+  <div class="bg-gray-800 rounded-lg p-4 md:p-5 space-y-4">
+    <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+      <div>
+        <label class="block text-sm font-medium text-gray-300 mb-2">Channel</label>
+        <select id="channelSelect"
+          class="w-full px-4 py-2.5 rounded-lg bg-dark-900 border border-gray-700 text-white focus:outline-none focus:ring-1 focus:ring-primary">
+          <% youtubeChannels.forEach(channel => { %>
+            <option value="<%= channel.id %>"><%= channel.channel_name %></option>
+          <% }) %>
+        </select>
+      </div>
+
+      <div class="xl:col-span-2 flex flex-col justify-end">
+        <div class="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onclick="switchTab('regular')"
+            id="tab-regular"
+            class="px-4 py-2 text-sm rounded-lg bg-primary text-white transition-colors">
+            Regular
+          </button>
+
+          <button
+            type="button"
+            onclick="switchTab('afterlive')"
+            id="tab-afterlive"
+            class="px-4 py-2 text-sm rounded-lg bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors">
+            Afterlive
+          </button>
+
+          <button
+            type="button"
+            onclick="openLanguageModal()"
+            class="px-4 py-2 text-sm rounded-lg bg-gray-700 text-gray-200 hover:bg-gray-600 transition-colors">
+            Languages
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-1">
+      <div id="translateStatus" class="text-sm text-gray-400">
+        Ready
+      </div>
+
+      <div id="channelLanguageSummary" class="text-xs text-gray-500">
+        Using channel default languages
+      </div>
+    </div>
+  </div>
+
+  <div class="hidden lg:block bg-gray-800 rounded-lg overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="bg-white/5 text-gray-400">
+          <tr>
+            <th class="px-6 py-4 text-left">Video</th>
+            <th class="px-6 py-4 text-left">Title</th>
+            <th class="px-6 py-4 text-left">Upload Date</th>
+            <th class="px-6 py-4 text-left">Languages</th>
+            <th class="px-6 py-4 text-right">Action</th>
+          </tr>
+        </thead>
+        <tbody id="videoTableBodyDesktop">
+          <tr>
+            <td colspan="5" class="px-6 py-8 text-center text-gray-500">
+              No data yet
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="lg:hidden space-y-3" id="videoCardListMobile">
+    <div class="bg-gray-800 rounded-lg p-5 text-center text-gray-500">
+      No data yet
+    </div>
+  </div>
+
+</div>
+
+<!-- Language Modal -->
+<div id="languageModal" class="fixed inset-0 z-[9998] hidden">
+  <div class="absolute inset-0 bg-black/60" onclick="closeLanguageModal()"></div>
+
+  <div class="absolute inset-x-4 top-6 mx-auto max-w-4xl bg-gray-800 border border-gray-700 rounded-2xl shadow-2xl">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-gray-700">
+      <div>
+        <h3 class="text-lg font-semibold text-white">Channel Languages</h3>
+        <p class="text-sm text-gray-400">Saved permanently for the selected channel</p>
+      </div>
+      <button type="button" onclick="closeLanguageModal()" class="text-gray-400 hover:text-white">
+        <i class="ti ti-x text-xl"></i>
+      </button>
+    </div>
+
+    <div class="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">Source Language</label>
+          <select id="modalSourceLanguage"
+            class="w-full px-4 py-2.5 rounded-lg bg-dark-900 border border-gray-700 text-white focus:outline-none focus:ring-1 focus:ring-primary">
+            <% languages.forEach(lang => { %>
+              <option value="<%= lang.code %>"><%= lang.name %> (<%= lang.code %>)</option>
+            <% }) %>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">Max Title Length</label>
+          <input id="modalMaxTitleLength" type="number" min="10" max="100" value="100"
+            class="w-full px-4 py-2.5 rounded-lg bg-dark-900 border border-gray-700 text-white focus:outline-none focus:ring-1 focus:ring-primary">
+        </div>
+      </div>
+
+      <div class="flex gap-3">
+        <button type="button" onclick="selectAllLanguages()" class="text-xs text-blue-400 hover:underline">
+          Select All
+        </button>
+        <button type="button" onclick="clearLanguages()" class="text-xs text-gray-400 hover:underline">
+          Clear
+        </button>
+      </div>
+
+      <div id="languageCheckboxes" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
+        <% languages.forEach(lang => { %>
+          <label class="flex items-center gap-2 px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-xs text-gray-200 cursor-pointer transition-colors">
+            <input type="checkbox" value="<%= lang.code %>" class="accent-blue-500">
+            <span><%= lang.name %> (<%= lang.code %>)</span>
+          </label>
+        <% }) %>
+      </div>
+    </div>
+
+    <div class="flex flex-col sm:flex-row gap-3 justify-end px-5 py-4 border-t border-gray-700">
+      <button type="button" onclick="closeLanguageModal()"
+        class="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-200 transition-colors">
+        Cancel
+      </button>
+      <button type="button" onclick="saveChannelLanguages()"
+        class="px-4 py-2 rounded-lg bg-primary hover:bg-blue-600 text-white transition-colors">
+        Save Languages
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+let currentTab = 'regular';
+let currentVideos = [];
+let isBulkTranslating = false;
+
+function switchTab(tab) {
+  currentTab = tab;
+
+  const regularBtn = document.getElementById('tab-regular');
+  const afterliveBtn = document.getElementById('tab-afterlive');
+
+  if (tab === 'regular') {
+    regularBtn.className = 'px-4 py-2 text-sm rounded-lg bg-primary text-white transition-colors';
+    afterliveBtn.className = 'px-4 py-2 text-sm rounded-lg bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors';
+  } else {
+    regularBtn.className = 'px-4 py-2 text-sm rounded-lg bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors';
+    afterliveBtn.className = 'px-4 py-2 text-sm rounded-lg bg-primary text-white transition-colors';
+  }
+
+  loadTranslateVideos();
+}
+
+function getSelectedLanguages() {
+  const checkboxes = document.querySelectorAll('#languageCheckboxes input:checked');
+  return Array.from(checkboxes).map(cb => cb.value);
+}
+
+function selectAllLanguages() {
+  document.querySelectorAll('#languageCheckboxes input').forEach(cb => cb.checked = true);
+}
+
+function clearLanguages() {
+  document.querySelectorAll('#languageCheckboxes input').forEach(cb => cb.checked = false);
+}
+
+function openLanguageModal() {
+  document.getElementById('languageModal').classList.remove('hidden');
+}
+
+function closeLanguageModal() {
+  document.getElementById('languageModal').classList.add('hidden');
+}
+
+function updateLanguageSummary(localizations = []) {
+  const summary = document.getElementById('channelLanguageSummary');
+
+  if (!localizations || localizations.length === 0) {
+    summary.textContent = 'Using channel default languages: none selected';
+    return;
+  }
+
+  summary.textContent = `Channel languages: ${localizations.join(', ')}`;
+}
+
+async function loadChannelLanguageSettings() {
+  const channelId = document.getElementById('channelSelect').value;
+  if (!channelId) return;
+
+  try {
+    const response = await fetch(`/api/youtube-channels/${channelId}/localization-settings`);
+    const result = await response.json();
+
+    if (!result.success) return;
+
+    document.getElementById('modalSourceLanguage').value = result.source_language || 'en';
+    document.getElementById('modalMaxTitleLength').value = result.max_title_length || 100;
+
+    document.querySelectorAll('#languageCheckboxes input').forEach(cb => {
+      cb.checked = (result.localizations || []).includes(cb.value);
+    });
+
+    updateLanguageSummary(result.localizations || []);
+  } catch (err) {
+    console.error('Failed loading channel language settings:', err);
+  }
+}
+
+async function saveChannelLanguages() {
+  const channelId = document.getElementById('channelSelect').value;
+  const sourceLanguage = document.getElementById('modalSourceLanguage').value;
+  const maxTitleLength = document.getElementById('modalMaxTitleLength').value;
+  const selectedLanguages = getSelectedLanguages();
+
+  try {
+    const response = await fetch(`/api/youtube-channels/${channelId}/localization-settings`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        source_language: sourceLanguage,
+        max_title_length: maxTitleLength,
+        localizations: selectedLanguages
+      })
+    });
+
+    const result = await response.json();
+
+    if (!result.success) {
+      showTranslateToast('error', result.error || 'Failed to save channel languages');
+      return;
+    }
+
+    updateLanguageSummary(selectedLanguages);
+    showTranslateToast('success', 'Channel languages saved');
+    closeLanguageModal();
+  } catch (err) {
+    console.error('Failed saving channel language settings:', err);
+    showTranslateToast('error', 'Failed to save channel languages');
+  }
+}
+
+function showTranslateToast(type, message) {
+  const toast = document.createElement('div');
+
+  const bgClass =
+    type === 'success' ? 'bg-green-600' :
+    type === 'error' ? 'bg-red-600' :
+    'bg-blue-600';
+
+  toast.className = `fixed top-4 right-4 z-[9999] px-4 py-3 rounded-lg text-white shadow-lg ${bgClass}`;
+  toast.textContent = message;
+
+  document.body.appendChild(toast);
+
+  setTimeout(() => {
+    toast.remove();
+  }, 3000);
+}
+
+function setSingleButtonLoading(videoId, isLoading) {
+  const desktopBtn = document.getElementById(`translate-btn-${videoId}`);
+  const mobileBtn = document.getElementById(`translate-btn-mobile-${videoId}`);
+
+  [desktopBtn, mobileBtn].forEach(btn => {
+    if (!btn) return;
+    btn.disabled = isLoading;
+    btn.innerHTML = isLoading
+      ? '<i class="ti ti-loader animate-spin mr-1"></i>Translating...'
+      : 'Translate';
+  });
+}
+
+function setBulkLoading(isLoading, text = 'Translate All') {
+  const bulkBtn = document.getElementById('translateAllBtn');
+  if (!bulkBtn) return;
+
+  bulkBtn.disabled = isLoading;
+  bulkBtn.innerHTML = isLoading
+    ? `<i class="ti ti-loader animate-spin"></i><span>${text}</span>`
+    : '<i class="ti ti-language"></i><span>Translate All</span>';
+}
+
+function renderDesktopTable(videos) {
+  const tbody = document.getElementById('videoTableBodyDesktop');
+  if (!tbody) return;
+
+  if (!videos || videos.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="5" class="px-6 py-8 text-center text-gray-500">No data found</td>
+      </tr>
+    `;
+    return;
+  }
+
+  tbody.innerHTML = videos.map(video => `
+    <tr class="border-t border-white/5 hover:bg-white/[0.02] transition-colors">
+      <td class="px-6 py-4">
+        <img src="${video.thumbnail || ''}" class="w-24 h-14 object-cover rounded-lg bg-gray-900" />
+      </td>
+      <td class="px-6 py-4">
+        <div class="text-white font-medium max-w-[420px] truncate">${video.title || '-'}</div>
+      </td>
+      <td class="px-6 py-4 text-gray-300">${video.uploadDate || '-'}</td>
+      <td class="px-6 py-4">
+        <span class="inline-flex items-center px-3 py-1 rounded-full bg-gray-700 text-gray-200 text-xs">
+          ${video.languageCount || 0} languages
+        </span>
+      </td>
+      <td class="px-6 py-4 text-right">
+        <button
+          id="translate-btn-${video.id}"
+          type="button"
+          onclick="translateVideo('${video.id}')"
+          class="inline-flex items-center justify-center px-4 py-2 bg-primary hover:bg-blue-600 rounded-lg text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+          Translate
+        </button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function renderMobileCards(videos) {
+  const container = document.getElementById('videoCardListMobile');
+  if (!container) return;
+
+  if (!videos || videos.length === 0) {
+    container.innerHTML = `
+      <div class="bg-gray-800 rounded-lg p-5 text-center text-gray-500">
+        No data found
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = videos.map(video => `
+    <div class="bg-gray-800 rounded-lg p-4 flex gap-4">
+      <img src="${video.thumbnail || ''}" class="w-24 h-16 object-cover rounded-lg flex-shrink-0 bg-gray-900" />
+      <div class="flex-1 min-w-0">
+        <div class="text-white font-medium leading-snug line-clamp-2">${video.title || '-'}</div>
+        <div class="text-xs text-gray-400 mt-2">${video.uploadDate || '-'}</div>
+        <div class="text-xs text-gray-400 mt-1">${video.languageCount || 0} languages</div>
+
+        <button
+          id="translate-btn-mobile-${video.id}"
+          type="button"
+          onclick="translateVideo('${video.id}')"
+          class="mt-3 w-full px-3 py-2.5 bg-primary hover:bg-blue-600 rounded-lg text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+          Translate
+        </button>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function loadTranslateVideos() {
+  const selectEl = document.getElementById('channelSelect');
+  if (!selectEl) return;
+
+  const channelId = selectEl.value;
+
+  try {
+    const url = `/api/translate/videos?channelId=${encodeURIComponent(channelId)}&tab=${encodeURIComponent(currentTab)}`;
+    const response = await fetch(url);
+    const result = await response.json();
+
+    if (!result.success) {
+      currentVideos = [];
+      renderDesktopTable([]);
+      renderMobileCards([]);
+      document.getElementById('translateStatus').textContent = result.error || 'Failed to load videos';
+      return;
+    }
+
+    const videos = (result.videos || []).map(video => ({
+      id: video.id,
+      title: video.title,
+      uploadDate: video.uploadDate ? new Date(video.uploadDate).toLocaleString() : '-',
+      thumbnail: video.thumbnail,
+      languageCount: video.languageCount || 0
+    }));
+
+    currentVideos = videos;
+
+    renderDesktopTable(videos);
+    renderMobileCards(videos);
+
+    document.getElementById('translateStatus').textContent =
+      videos.length > 0 ? `${videos.length} video(s) loaded` : 'No data found';
+  } catch (err) {
+    console.error('[Translate UI] Failed loading translate videos:', err);
+    currentVideos = [];
+    renderDesktopTable([]);
+    renderMobileCards([]);
+    document.getElementById('translateStatus').textContent = 'Failed to load videos';
+  }
+}
+
+async function translateVideo(videoId, silent = false) {
+  const channelId = document.getElementById('channelSelect').value;
+
+  try {
+    setSingleButtonLoading(videoId, true);
+
+    const selectedLanguages = getSelectedLanguages();
+
+    const response = await fetch('/api/translate/video', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        videoId,
+        channelId,
+        languages: selectedLanguages
+      })
+    });
+
+    const result = await response.json();
+
+    if (!result.success) {
+      if (!silent) {
+        showTranslateToast('error', result.error || 'Failed to translate video');
+      }
+      throw new Error(result.error || 'Failed to translate video');
+    }
+
+    if (!silent) {
+      if (result.skipped) {
+        showTranslateToast('success', `Already complete: ${result.localizationCount} language(s) already exist`);
+      } else {
+        showTranslateToast('success', `Added ${result.addedLanguages} language(s). Total now: ${result.localizationCount}`);
+      }
+      await loadTranslateVideos();
+    }
+
+    return result;
+  } catch (err) {
+    console.error('Translate video failed:', err);
+
+    if (!silent) {
+      showTranslateToast('error', 'Failed to translate video');
+    }
+
+    throw err;
+  } finally {
+    setSingleButtonLoading(videoId, false);
+  }
+}
+
+async function translateAllVideos() {
+  if (isBulkTranslating) return;
+  if (!currentVideos || currentVideos.length === 0) {
+    showTranslateToast('error', 'No videos to translate');
+    return;
+  }
+
+  isBulkTranslating = true;
+  setBulkLoading(true, 'Translating...');
+  document.getElementById('translateStatus').textContent = 'Starting bulk translation...';
+
+  let successCount = 0;
+  let failCount = 0;
+
+  try {
+    for (let i = 0; i < currentVideos.length; i++) {
+      const video = currentVideos[i];
+
+      document.getElementById('translateStatus').textContent =
+        `Translating ${i + 1} / ${currentVideos.length}: ${video.title}`;
+
+      try {
+        const result = await translateVideo(video.id, true);
+
+        if (result && !result.skipped) {
+          successCount++;
+        }
+      } catch (err) {
+        failCount++;
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 1500));
+    }
+
+    document.getElementById('translateStatus').textContent =
+      `Done. Success: ${successCount}, Failed: ${failCount}`;
+
+    showTranslateToast('success', `Bulk translate finished. Success: ${successCount}, Failed: ${failCount}`);
+  } catch (err) {
+    console.error('Bulk translate failed:', err);
+    document.getElementById('translateStatus').textContent = 'Bulk translate failed';
+    showTranslateToast('error', 'Bulk translate failed');
+  } finally {
+    isBulkTranslating = false;
+    setBulkLoading(false, 'Translate All');
+    await loadTranslateVideos();
+  }
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+  const channelSelect = document.getElementById('channelSelect');
+
+  if (channelSelect) {
+    channelSelect.addEventListener('change', async () => {
+      await loadChannelLanguageSettings();
+      await loadTranslateVideos();
+    });
+
+    if (channelSelect.options.length > 0) {
+      channelSelect.selectedIndex = 0;
+    }
+  }
+
+  await loadChannelLanguageSettings();
+  await loadTranslateVideos();
+});
+</script>

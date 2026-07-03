@@ -328,6 +328,34 @@
             </form>
           </div>
 
+                <div class="bg-dark-900 rounded-lg p-4 border border-gray-700">
+                  <h4 class="text-lg font-semibold mb-1">AI Translation Settings</h4>
+                  <p class="text-gray-400 text-sm mb-4">Choose provider, model, and API key for automatic title/description translation.</p>
+
+                  <label class="block text-sm font-medium text-gray-300 mb-2">AI Provider</label>
+                  <select id="aiProvider" class="w-full mb-4 px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-white">
+                  </select>
+
+                  <label class="block text-sm font-medium text-gray-300 mb-2">API Key</label>
+                   <div class="flex flex-col sm:flex-row gap-2 mb-2">
+                    <input id="aiApiKey" type="password"
+                      class="flex-1 px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-white"
+                      placeholder="Enter API key">
+                      <p id="aiApiKeyHelp" class="text-xs text-gray-500 mt-2"></p>
+                      <button type="button" onclick="saveAiSettings()"
+                      class="px-4 py-2 rounded-lg bg-primary hover:bg-blue-600 text-white transition-colors">
+                      Save
+                    </button>
+                  </div>
+
+                  <div id="aiApiKeyStatus" class="mb-4 text-sm text-gray-300"></div>
+
+                  <label class="block text-sm font-medium text-gray-300 mb-2">Model</label>
+                  <select id="aiModel" class="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-white">
+                  </select>
+                </div>
+
+
           <div class="lg:pl-8">
             <div class="space-y-4">
               <div class="flex items-center justify-between">
@@ -348,26 +376,47 @@
                   <% youtubeChannels.forEach(function(channel) { %>
                     <div class="bg-dark-900 rounded-lg p-4 border border-gray-700 channel-item" data-channel-id="<%= channel.id %>">
                       <div class="flex items-center justify-between flex-wrap gap-4">
-                        <div class="flex items-center gap-3">
-                          <div class="w-12 h-12 rounded-full overflow-hidden bg-gray-700 flex-shrink-0">
-                            <% if (channel.channel_thumbnail) { %>
-                              <img src="<%= channel.channel_thumbnail %>" alt="Channel" class="w-full h-full object-cover">
-                            <% } else { %>
-                              <div class="w-full h-full flex items-center justify-center bg-red-600">
-                                <i class="ti ti-brand-youtube text-white text-xl"></i>
-                              </div>
-                            <% } %>
-                          </div>
-                          <div>
-                            <div class="flex items-center gap-2">
-                              <p class="font-medium text-white"><%= channel.channel_name %></p>
-                              <% if (channel.is_default) { %>
-                                <span class="px-2 py-0.5 bg-blue-600/20 text-blue-600 text-xs rounded-sm">Default</span>
-                              <% } %>
-                            </div>
-                            <p class="text-xs text-gray-400"><%= Number(channel.subscriber_count || 0).toLocaleString() %> subscribers</p>
-                          </div>
-                        </div>
+<div class="flex items-center gap-3">
+  <div class="w-12 h-12 rounded-full overflow-hidden bg-gray-700 flex-shrink-0">
+    <% if (channel.channel_thumbnail) { %>
+      <img src="<%= channel.channel_thumbnail %>" class="w-full h-full object-cover">
+    <% } else { %>
+      <div class="w-full h-full flex items-center justify-center bg-red-600">
+        <i class="ti ti-brand-youtube text-white text-xl"></i>
+      </div>
+    <% } %>
+  </div>
+
+  <div>
+    <div class="flex items-center gap-2 flex-wrap">
+      <p class="font-medium text-white"><%= channel.channel_name %></p>
+
+      <% if (channel.is_default) { %>
+        <span class="px-2 py-0.5 bg-blue-600/20 text-blue-400 text-xs rounded">
+          Default
+        </span>
+      <% } %>
+
+      <% if (channel.auth_status === 'expired') { %>
+        <span class="px-2 py-0.5 bg-red-600/20 text-red-400 text-xs rounded">
+          Expired
+        </span>
+      <% } else { %>
+        <span class="px-2 py-0.5 bg-green-600/20 text-green-400 text-xs rounded">
+          Connected
+        </span>
+      <% } %>
+    </div>
+
+    <p class="text-xs text-gray-400">
+      <%= Number(channel.subscriber_count || 0).toLocaleString() %> subscribers
+    </p>
+
+    <% if (channel.auth_error) { %>
+      <p class="text-xs text-red-400 mt-1"><%= channel.auth_error %></p>
+    <% } %>
+  </div>
+</div>
                         <div class="flex items-center gap-2">
                           <% if (!channel.is_default) { %>
                             <button type="button" onclick="setDefaultChannel('<%= channel.id %>')"
@@ -1176,4 +1225,118 @@
   if (window.location.hash === '#about') {
     loadContributors();
   }
+
+let aiProvidersConfig = {};
+
+async function loadAiSettings() {
+  try {
+    const response = await fetch('/api/ai-settings');
+    const result = await response.json();
+    if (!result.success) return;
+
+    aiProvidersConfig = result.providers || {};
+
+    const providerSelect = document.getElementById('aiProvider');
+    const modelSelect = document.getElementById('aiModel');
+    const statusEl = document.getElementById('aiApiKeyStatus');
+
+    if (!providerSelect || !modelSelect || !statusEl) return;
+
+    providerSelect.innerHTML = '';
+    Object.entries(aiProvidersConfig).forEach(([key, value]) => {
+      const option = document.createElement('option');
+      option.value = key;
+      option.textContent = value.name;
+      providerSelect.appendChild(option);
+    });
+
+    providerSelect.value = result.ai_provider || 'openai';
+    populateModels(providerSelect.value, result.ai_model);
+
+const apiKeyInput = document.getElementById('aiApiKey');
+const helpEl = document.getElementById('aiApiKeyHelp');
+
+if (result.ai_api_key_saved) {
+  statusEl.textContent = 'API Key saved';
+  if (apiKeyInput) apiKeyInput.value = '••••••••••••••••';
+  if (helpEl) helpEl.textContent = 'Enter a new value to update';
+} else {
+  statusEl.textContent = 'No API Key saved';
+  if (apiKeyInput) apiKeyInput.value = '';
+  if (helpEl) helpEl.textContent = '';
+}
+  } catch (err) {
+    console.error('Failed loading AI settings:', err);
+  }
+}
+
+function populateModels(provider, selectedModel = null) {
+  const modelSelect = document.getElementById('aiModel');
+  if (!modelSelect) return;
+
+  modelSelect.innerHTML = '';
+
+  const config = aiProvidersConfig[provider];
+  if (!config) return;
+
+  config.models.forEach(model => {
+    const option = document.createElement('option');
+    option.value = model;
+    option.textContent = model;
+    modelSelect.appendChild(option);
+  });
+
+  if (selectedModel && config.models.includes(selectedModel)) {
+    modelSelect.value = selectedModel;
+  }
+}
+
+async function saveAiSettings() {
+  try {
+    const provider = document.getElementById('aiProvider').value;
+    const model = document.getElementById('aiModel').value;
+    const apiKeyRaw = document.getElementById('aiApiKey').value;
+    const apiKey = apiKeyRaw === '••••••••••••••••' ? '' : apiKeyRaw;
+    const statusEl = document.getElementById('aiApiKeyStatus');
+
+    const response = await fetch('/api/ai-settings', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        ai_provider: provider,
+        ai_model: model,
+        ai_api_key: apiKey
+      })
+    });
+
+    const result = await response.json();
+
+    if (!result.success) {
+      statusEl.textContent = 'Failed to save';
+      return;
+    }
+
+    statusEl.textContent = 'API Key saved';
+    document.getElementById('aiApiKey').value = '••••••••••••••••';
+
+    const helpEl = document.getElementById('aiApiKeyHelp');
+    if (helpEl) helpEl.textContent = 'Enter a new value to update';
+    document.getElementById('aiApiKey').value = '';
+  } catch (err) {
+    console.error('Failed saving AI settings:', err);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  loadAiSettings();
+
+  const providerSelect = document.getElementById('aiProvider');
+  if (providerSelect) {
+    providerSelect.addEventListener('change', () => {
+      populateModels(providerSelect.value);
+    });
+  }
+});
   </script>

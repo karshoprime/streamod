@@ -111,6 +111,11 @@
           <span class="text-xs mt-1">Rotations</span>
           <span class="sidebar-tooltip group-hover:scale-100">Stream Rotations</span>
         </a>
+<a href="/translate" class="sidebar-icon group <%= active === 'translate' ? 'bg-primary' : '' %>">
+  <i class="ti ti-language text-xl"></i>
+  <span class="text-xs mt-1">Translate</span>
+  <span class="sidebar-tooltip group-hover:scale-100">AI Translate</span>
+</a>
         <a href="/gallery" class="sidebar-icon group <%= active === 'gallery' ? 'bg-primary' : '' %>">
           <i class="ti ti-video text-xl"></i>
           <span class="text-xs mt-1">Gallery</span>
@@ -131,7 +136,6 @@
           <i class="ti ti-users text-xl"></i>
           <span class="text-xs mt-1">Users</span>
           <span class="sidebar-tooltip group-hover:scale-100">User Management</span>
-        </a>
         <% } %>
       </div>
       <div class="mt-auto">
@@ -230,6 +234,10 @@
       <a href="/rotations" class="bottom-nav-item <%= active === 'rotations' ? 'bottom-nav-active' : '' %>">
         <i class="ti ti-rotate"></i>
         <span>Rotations</span>
+      </a>
+      <a href="/translate" class="bottom-nav-item <%= active === 'translate' ? 'bottom-nav-active' : '' %>">
+        <i class="ti ti-language"></i>
+        <span>Translate</span>
       </a>
       <a href="/gallery" class="bottom-nav-item <%= active === 'gallery' ? 'bottom-nav-active' : '' %>">
         <i class="ti ti-video"></i>

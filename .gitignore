@@ -1,8 +1,17 @@
-node_modules
-public/uploads/
-logs/
-
-# ignore real env from repo
+node_modules/
 .env
-package-lock.json
-db/streamflow.db
+.env.*
+db/
+*.sqlite
+*.sqlite3
+logs/
+*.log
+uploads/
+tmp/
+cache/
+.DS_Store
+temp/
+.well-known/
+*.bak
+*.bak_*
+*.before_*

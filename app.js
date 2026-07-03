@@ -30,6 +30,8 @@ const { getVideoInfo, generateThumbnail, generateImageThumbnail } = require('./u
 const Video = require('./models/Video');
 const MediaFolder = require('./models/MediaFolder');
 const Playlist = require('./models/Playlist');
+const languages = require('./config/languages');
+const aiProviders = require('./config/aiProviders');
 const Stream = require('./models/Stream');
 const ffmpeg = require('fluent-ffmpeg');
 const ffmpegInstaller = require('@ffmpeg-installer/ffmpeg');
@@ -117,6 +119,7 @@ app.locals.helpers = {
     return `${hours}:${minutes}:${secs}`;
   }
 };
+
 app.use(session({
   store: new SQLiteStore({
     db: 'sessions.db',
@@ -1633,6 +1636,42 @@ app.post('/api/settings/logs/clear', isAuthenticated, async (req, res) => {
   }
 });
 
+app.get('/api/ai-settings', isAuthenticated, async (req, res) => {
+  try {
+    const User = require('./models/User');
+    const user = await User.findById(req.session.userId);
+
+    res.json({
+      success: true,
+      ai_provider: user.ai_provider || 'openai',
+      ai_model: user.ai_model || 'gpt-4o-mini',
+      ai_api_key_saved: !!user.ai_api_key,
+      providers: aiProviders
+    });
+  } catch (error) {
+    console.error('Error loading AI settings:', error);
+    res.status(500).json({ success: false, error: 'Failed to load AI settings' });
+  }
+});
+
+app.post('/api/ai-settings', isAuthenticated, async (req, res) => {
+  try {
+    const User = require('./models/User');
+    const { ai_provider, ai_model, ai_api_key } = req.body;
+
+    await User.update(req.session.userId, {
+      ai_provider: ai_provider || 'openai',
+      ai_model: ai_model || 'gpt-4o-mini',
+      ...(ai_api_key ? { ai_api_key } : {})
+    });
+
+    res.json({ success: true, message: 'AI settings saved' });
+  } catch (error) {
+    console.error('Error saving AI settings:', error);
+    res.status(500).json({ success: false, error: 'Failed to save AI settings' });
+  }
+});
+
 app.post('/settings/integrations/gdrive', isAuthenticated, [
   body('apiKey').notEmpty().withMessage('API Key is required'),
 ], async (req, res) => {
@@ -2633,7 +2672,9 @@ app.get('/auth/youtube/callback', isAuthenticated, async (req, res) => {
         refresh_token: tokens.refresh_token ? encrypt(tokens.refresh_token) : existingChannel.refresh_token,
         channel_name: channelName,
         channel_thumbnail: channelThumbnail,
-        subscriber_count: subscriberCount
+        subscriber_count: subscriberCount,
+        auth_status: 'connected',
+        auth_error: null
       });
     } else {
       await YoutubeChannel.create({
@@ -2642,6 +2683,8 @@ app.get('/auth/youtube/callback', isAuthenticated, async (req, res) => {
         channel_name: channelName,
         channel_thumbnail: channelThumbnail,
         subscriber_count: subscriberCount,
+        auth_status: 'connected',
+        auth_error: null,
         access_token: encrypt(tokens.access_token),
         refresh_token: tokens.refresh_token ? encrypt(tokens.refresh_token) : null
       });
@@ -4347,7 +4390,8 @@ app.get('/rotations', isAuthenticated, async (req, res) => {
       youtubeChannels: youtubeChannels,
       youtubeChannelName: defaultChannel?.channel_name || '',
       youtubeChannelThumbnail: defaultChannel?.channel_thumbnail || '',
-      youtubeSubscriberCount: defaultChannel?.subscriber_count || '0'
+      youtubeSubscriberCount: defaultChannel?.subscriber_count || '0',
+      languages: languages
     });
   } catch (error) {
     console.error('Rotations page error:', error);
@@ -4388,7 +4432,17 @@ app.post('/api/rotations', isAuthenticated, uploadThumbnail.any(), async (req, r
     const parsedItems = typeof items === 'string' ? JSON.parse(items) : items;
     
     if (!name || !parsedItems || parsedItems.length === 0) {
-      return res.status(400).json({ success: false, error: 'Name and at least one item are required' });
+const {
+  name,
+  repeat_mode,
+  start_time,
+  end_time,
+  items,
+  youtube_channel_id,
+  channel_localizations,
+  channel_source_language,
+  channel_max_title_length
+} = req.body;
     }
     
     if (!start_time || !end_time) {
@@ -4453,6 +4507,27 @@ app.post('/api/rotations', isAuthenticated, uploadThumbnail.any(), async (req, r
   }
 });
 
+app.get('/api/youtube-channels/:id/localization-settings', isAuthenticated, async (req, res) => {
+  try {
+    const YoutubeChannel = require('./models/YoutubeChannel');
+    const channel = await YoutubeChannel.findById(req.params.id);
+
+    if (!channel) {
+      return res.status(404).json({ success: false, error: 'Channel not found' });
+    }
+
+    res.json({
+      success: true,
+      source_language: channel.source_language || 'en',
+      localizations: channel.localizations ? JSON.parse(channel.localizations) : [],
+      max_title_length: channel.max_title_length || 100
+    });
+  } catch (error) {
+    console.error('Error loading channel localization settings:', error);
+    res.status(500).json({ success: false, error: 'Failed to load channel localization settings' });
+  }
+});
+
 app.put('/api/rotations/:id', isAuthenticated, uploadThumbnail.any(), async (req, res) => {
   try {
     const rotation = await Rotation.findById(req.params.id);
@@ -4462,8 +4537,20 @@ app.put('/api/rotations/:id', isAuthenticated, uploadThumbnail.any(), async (req
     if (rotation.user_id !== req.session.userId) {
       return res.status(403).json({ success: false, error: 'Not authorized' });
     }
+
+const YoutubeChannel = require('./models/YoutubeChannel');
     
-    const { name, repeat_mode, start_time, end_time, items, youtube_channel_id } = req.body;
+const {
+  name,
+  repeat_mode,
+  start_time,
+  end_time,
+  items,
+  youtube_channel_id,
+  channel_localizations,
+  channel_source_language,
+  channel_max_title_length
+} = req.body;
     
     const parsedItems = typeof items === 'string' ? JSON.parse(items) : items;
     
@@ -4475,52 +4562,124 @@ app.put('/api/rotations/:id', isAuthenticated, uploadThumbnail.any(), async (req
       repeat_mode: repeat_mode || 'daily',
       youtube_channel_id: youtube_channel_id || null
     });
-    
-    const existingItems = await Rotation.getItemsByRotationId(req.params.id);
-    for (const item of existingItems) {
-      await Rotation.deleteItem(item.id);
-    }
-    
-    const uploadedFiles = req.files || [];
-    const uploadedFileMap = new Map(
-      uploadedFiles.map(file => [file.fieldname, file])
-    );
-    
-    for (let i = 0; i < parsedItems.length; i++) {
-      const item = parsedItems[i];
-      const thumbnailFile = uploadedFileMap.get(`thumbnail_${item.thumbnail_upload_index}`);
-      
-      let thumbnailPath = item.thumbnail_path && item.thumbnail_path !== 'rotations' ? item.thumbnail_path : null;
-      let originalThumbnailPath = item.original_thumbnail_path || null;
-      if (thumbnailFile && thumbnailFile.size > 0) {
-        const originalFilename = thumbnailFile.filename;
-        const thumbFilename = `thumb-${path.parse(originalFilename).name}.jpg`;
-        
-        originalThumbnailPath = originalFilename;
-        
-        try {
-          await generateImageThumbnail(thumbnailFile.path, thumbFilename);
-          thumbnailPath = thumbFilename;
-        } catch (thumbErr) {
-          console.error('Error generating rotation thumbnail:', thumbErr);
-          thumbnailPath = originalFilename;
-        }
+
+      if (youtube_channel_id) {
+        const parsedLocalizations = channel_localizations
+          ? JSON.parse(channel_localizations)
+          : [];
+
+        await YoutubeChannel.update(youtube_channel_id, {
+          source_language: channel_source_language || 'en',
+          localizations: JSON.stringify(parsedLocalizations),
+          max_title_length: parseInt(channel_max_title_length || '100', 10)
+        });
       }
-      
-      await Rotation.addItem({
-        rotation_id: req.params.id,
-        order_index: item.order_index,
-        video_id: item.video_id,
-        title: item.title,
-        description: item.description || '',
-        tags: item.tags || '',
-        thumbnail_path: thumbnailPath,
-        original_thumbnail_path: originalThumbnailPath,
-        privacy: item.privacy || 'unlisted',
-        category: item.category || '22',
-        youtube_monetization: item.youtube_monetization === true || item.youtube_monetization === 'true'
-      });
-    }
+
+      const currentRotation = await Rotation.findById(req.params.id);
+
+const uploadedFiles = req.files || [];
+const uploadedFileMap = new Map(
+  uploadedFiles.map(file => [file.fieldname, file])
+);
+
+      if (currentRotation && currentRotation.status === 'active') {
+        const fs = require('fs');
+        const pendingPath = path.join(__dirname, 'pending_rotations', `${req.params.id}.json`);
+
+        const pendingItems = [];
+
+        for (let i = 0; i < parsedItems.length; i++) {
+          const item = parsedItems[i];
+          const thumbnailFile = uploadedFileMap.get(`thumbnail_${item.thumbnail_upload_index}`);
+
+          let thumbnailPath = item.thumbnail_path && item.thumbnail_path !== 'rotations' ? item.thumbnail_path : null;
+          let originalThumbnailPath = item.original_thumbnail_path || null;
+
+          if (thumbnailFile && thumbnailFile.size > 0) {
+            const originalFilename = thumbnailFile.filename;
+            const thumbFilename = `thumb-${path.parse(originalFilename).name}.jpg`;
+
+            originalThumbnailPath = originalFilename;
+
+            try {
+              await generateImageThumbnail(thumbnailFile.path, thumbFilename);
+              thumbnailPath = thumbFilename;
+            } catch (thumbErr) {
+              console.error('Error generating rotation thumbnail:', thumbErr);
+              thumbnailPath = originalFilename;
+            }
+          }
+
+          pendingItems.push({
+            rotation_id: req.params.id,
+            order_index: item.order_index,
+            video_id: item.video_id,
+            title: item.title,
+            description: item.description || '',
+            tags: item.tags || '',
+            thumbnail_path: thumbnailPath,
+            original_thumbnail_path: originalThumbnailPath,
+            privacy: item.privacy || 'unlisted',
+            category: item.category || '22',
+            youtube_monetization: item.youtube_monetization === true || item.youtube_monetization === 'true'
+          });
+        }
+
+        fs.writeFileSync(
+          pendingPath,
+          JSON.stringify({
+            rotation_id: req.params.id,
+            saved_at: new Date().toISOString(),
+            items: pendingItems
+          }, null, 2)
+        );
+
+        return res.json({
+          success: true,
+          message: 'Rotation is live. Changes were saved and will apply after the current live session ends.'
+        });
+      }
+
+      const existingItems = await Rotation.getItemsByRotationId(req.params.id);
+      for (const item of existingItems) {
+        await Rotation.deleteItem(item.id);
+      }
+
+      for (let i = 0; i < parsedItems.length; i++) {
+        const item = parsedItems[i];
+        const thumbnailFile = uploadedFileMap.get(`thumbnail_${item.thumbnail_upload_index}`);
+
+        let thumbnailPath = item.thumbnail_path && item.thumbnail_path !== 'rotations' ? item.thumbnail_path : null;
+        let originalThumbnailPath = item.original_thumbnail_path || null;
+        if (thumbnailFile && thumbnailFile.size > 0) {
+          const originalFilename = thumbnailFile.filename;
+          const thumbFilename = `thumb-${path.parse(originalFilename).name}.jpg`;
+
+          originalThumbnailPath = originalFilename;
+
+          try {
+            await generateImageThumbnail(thumbnailFile.path, thumbFilename);
+            thumbnailPath = thumbFilename;
+          } catch (thumbErr) {
+            console.error('Error generating rotation thumbnail:', thumbErr);
+            thumbnailPath = originalFilename;
+          }
+        }
+
+        await Rotation.addItem({
+          rotation_id: req.params.id,
+          order_index: item.order_index,
+          video_id: item.video_id,
+          title: item.title,
+          description: item.description || '',
+          tags: item.tags || '',
+          thumbnail_path: thumbnailPath,
+          original_thumbnail_path: originalThumbnailPath,
+          privacy: item.privacy || 'unlisted',
+          category: item.category || '22',
+          youtube_monetization: item.youtube_monetization === true || item.youtube_monetization === 'true'
+        });
+      }    
     
     res.json({ success: true, message: 'Rotation updated' });
   } catch (error) {
@@ -4642,6 +4801,391 @@ const server = app.listen(port, '0.0.0.0', async () => {
   }
 });
 
+app.get('/translate', isAuthenticated, async (req, res) => {
+  try {
+    const YoutubeChannel = require('./models/YoutubeChannel');
+    const youtubeChannels = await YoutubeChannel.findAll(req.session.userId);
+
+    res.render('translate', {
+      title: 'Translate',
+      active: 'translate',
+      user: req.session.user,
+      youtubeChannels
+    });
+  } catch (error) {
+    console.error('Translate page error:', error);
+    res.redirect('/dashboard');
+  }
+});
+
+app.get('/api/translate/videos', isAuthenticated, async (req, res) => {
+  try {
+    const { channelId, tab } = req.query;
+
+    const YoutubeChannel = require('./models/YoutubeChannel');
+    const User = require('./models/User');
+    const { google } = require('googleapis');
+    const { decrypt } = require('./utils/encryption');
+
+    if (!channelId) {
+      return res.status(400).json({ success: false, error: 'channelId is required' });
+    }
+
+    const user = await User.findById(req.session.userId);
+    const selectedChannel = await YoutubeChannel.findById(channelId);
+
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    if (!selectedChannel) {
+      return res.status(404).json({ success: false, error: 'Channel not found' });
+    }
+
+    if (selectedChannel.user_id !== req.session.userId) {
+      return res.status(403).json({ success: false, error: 'Not authorized' });
+    }
+
+    const oauth2Client = new google.auth.OAuth2(
+      user.youtube_client_id,
+      decrypt(user.youtube_client_secret),
+      `${req.protocol}://${req.get('host')}/auth/youtube/callback`
+    );
+
+    oauth2Client.setCredentials({
+      access_token: decrypt(selectedChannel.access_token),
+      refresh_token: decrypt(selectedChannel.refresh_token)
+    });
+
+    const youtube = google.youtube({ version: 'v3', auth: oauth2Client });
+
+    let targetLanguages = [];
+    try {
+      targetLanguages = selectedChannel.localizations
+        ? JSON.parse(selectedChannel.localizations)
+        : [];
+    } catch {
+      targetLanguages = [];
+    }
+
+    // 1) Video biasa / published / sebagian live
+    let searchVideoIds = [];
+    try {
+      const searchResponse = await youtube.search.list({
+        part: ['snippet'],
+        channelId: selectedChannel.channel_id,
+        maxResults: 25,
+        order: 'date',
+        type: ['video']
+      });
+
+      const searchItems = searchResponse.data.items || [];
+      searchVideoIds = searchItems
+        .map(item => item.id?.videoId)
+        .filter(Boolean);
+
+      console.log('[Translate API] searchVideoIds:', searchVideoIds.length);
+    } catch (searchErr) {
+      console.error('[Translate API] Failed loading search videos:', searchErr.message);
+    }
+
+    // 2) Upcoming / scheduled livestream
+    let upcomingVideoIds = [];
+    try {
+      const upcomingResponse = await youtube.liveBroadcasts.list({
+        part: ['id', 'snippet', 'status', 'contentDetails'],
+        broadcastStatus: 'upcoming',
+        broadcastType: 'all',
+        mine: true,
+        maxResults: 25
+      });
+
+      const upcomingItems = upcomingResponse.data.items || [];
+      upcomingVideoIds = upcomingItems
+        .map(item => item.id)
+        .filter(Boolean);
+
+      console.log('[Translate API] upcomingVideoIds:', upcomingVideoIds.length);
+    } catch (upcomingErr) {
+      console.error('[Translate API] Failed loading upcoming broadcasts:', upcomingErr.message);
+    }
+
+    // 3) Active / live livestream
+    let activeVideoIds = [];
+    try {
+      const activeResponse = await youtube.liveBroadcasts.list({
+        part: ['id', 'snippet', 'status', 'contentDetails'],
+        broadcastStatus: 'active',
+        broadcastType: 'all',
+        mine: true,
+        maxResults: 25
+      });
+
+      const activeItems = activeResponse.data.items || [];
+      activeVideoIds = activeItems
+        .map(item => item.id)
+        .filter(Boolean);
+
+      console.log('[Translate API] activeVideoIds:', activeVideoIds.length);
+    } catch (activeErr) {
+      console.error('[Translate API] Failed loading active broadcasts:', activeErr.message);
+    }
+
+    // 4) Completed / afterlive livestream
+    let completedVideoIds = [];
+    try {
+      const completedResponse = await youtube.liveBroadcasts.list({
+        part: ['id', 'snippet', 'status', 'contentDetails'],
+        broadcastStatus: 'completed',
+        broadcastType: 'all',
+        mine: true,
+        maxResults: 25
+      });
+
+      const completedItems = completedResponse.data.items || [];
+      completedVideoIds = completedItems
+        .map(item => item.id)
+        .filter(Boolean);
+
+      console.log('[Translate API] completedVideoIds:', completedVideoIds.length);
+    } catch (completedErr) {
+      console.error('[Translate API] Failed loading completed broadcasts:', completedErr.message);
+    }
+
+    // Gabungkan semua ID video, buang duplicate
+    const videoIds = [
+      ...new Set([
+        ...searchVideoIds,
+        ...upcomingVideoIds,
+        ...activeVideoIds,
+        ...completedVideoIds
+      ])
+    ];
+
+    console.log('[Translate API] merged videoIds:', videoIds.length);
+
+    if (videoIds.length === 0) {
+      return res.json({ success: true, videos: [] });
+    }
+
+    const videosResponse = await youtube.videos.list({
+      part: ['snippet', 'liveStreamingDetails', 'localizations', 'status'],
+      id: videoIds
+    });
+
+    const items = videosResponse.data.items || [];
+    console.log('[Translate API] videos.list items:', items.length);
+
+    let videos = items.map(video => {
+      const localizations = video.localizations || {};
+      const existingLanguages = Object.keys(localizations);
+
+      const missingLanguages = targetLanguages.filter(
+        lang => !existingLanguages.includes(lang)
+      );
+
+      const liveDetails = video.liveStreamingDetails || {};
+      const actualStartTime = liveDetails.actualStartTime || null;
+      const actualEndTime = liveDetails.actualEndTime || null;
+      const scheduledStartTime = liveDetails.scheduledStartTime || null;
+
+      const isAfterlive = !!actualEndTime;
+      const isScheduled = !!scheduledStartTime && !actualEndTime;
+      const isLiveNow = !!actualStartTime && !actualEndTime;
+      const isRegular = !isAfterlive; // regular termasuk published + live + scheduled
+
+      return {
+        id: video.id,
+        title: video.snippet?.title || '-',
+        uploadDate: video.snippet?.publishedAt || scheduledStartTime || '',
+        thumbnail:
+          video.snippet?.thumbnails?.medium?.url ||
+          video.snippet?.thumbnails?.default?.url ||
+          '',
+        languageCount: existingLanguages.length,
+        availableLanguages: existingLanguages,
+        missingLanguages,
+        isAfterlive,
+        isRegular,
+        isScheduled,
+        isLiveNow
+      };
+    });
+
+    if (tab === 'afterlive') {
+      videos = videos.filter(v => v.isAfterlive);
+    } else {
+      // regular = video biasa + live aktif + scheduled
+      videos = videos.filter(v => v.isRegular);
+    }
+
+    videos.sort((a, b) => new Date(b.uploadDate || 0) - new Date(a.uploadDate || 0));
+
+    return res.json({ success: true, videos });
+  } catch (error) {
+    console.error('Translate videos API error:', error.response?.data || error.message || error);
+    return res.status(500).json({ success: false, error: 'Failed to load videos' });
+  }
+});
+
+app.post('/api/translate/video', isAuthenticated, async (req, res) => {
+  try {
+    const { videoId, channelId, languages } = req.body;
+
+    console.log('[Translate Video] videoId:', videoId);
+    console.log('[Translate Video] channelId:', channelId);
+    console.log('[Translate Video] languages from UI:', languages);
+
+    if (!videoId || !channelId) {
+      return res.status(400).json({ success: false, error: 'videoId and channelId are required' });
+    }
+
+    const YoutubeChannel = require('./models/YoutubeChannel');
+    const User = require('./models/User');
+    const { google } = require('googleapis');
+    const { decrypt } = require('./utils/encryption');
+    const { buildLocalizedMetadata } = require('./services/translationService');
+
+    const user = await User.findById(req.session.userId);
+    const selectedChannel = await YoutubeChannel.findById(channelId);
+
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    if (!selectedChannel) {
+      return res.status(404).json({ success: false, error: 'Channel not found' });
+    }
+
+    if (selectedChannel.user_id !== req.session.userId) {
+      return res.status(403).json({ success: false, error: 'Not authorized' });
+    }
+
+    const oauth2Client = new google.auth.OAuth2(
+      user.youtube_client_id,
+      decrypt(user.youtube_client_secret),
+      `${req.protocol}://${req.get('host')}/auth/youtube/callback`
+    );
+
+    oauth2Client.setCredentials({
+      access_token: decrypt(selectedChannel.access_token),
+      refresh_token: decrypt(selectedChannel.refresh_token)
+    });
+
+    const youtube = google.youtube({ version: 'v3', auth: oauth2Client });
+
+    const videoResponse = await youtube.videos.list({
+      part: ['snippet', 'localizations'],
+      id: [videoId]
+    });
+
+    const video = videoResponse.data.items?.[0];
+    if (!video) {
+      return res.status(404).json({ success: false, error: 'Video not found' });
+    }
+
+    const sourceLanguage = selectedChannel.source_language || 'en';
+
+    let targetLanguages = selectedChannel.localizations
+      ? JSON.parse(selectedChannel.localizations)
+      : [];
+
+    if (languages && Array.isArray(languages) && languages.length > 0) {
+      targetLanguages = languages;
+    }
+
+    console.log('[Translate Video] sourceLanguage:', sourceLanguage);
+    console.log('[Translate Video] final targetLanguages:', targetLanguages);
+
+    const maxTitleLength = selectedChannel.max_title_length || 100;
+
+    if (!targetLanguages.length) {
+      return res.status(400).json({ success: false, error: 'No localizations configured for this channel' });
+    }
+
+    const existingLocalizations = video.localizations || {};
+    const existingLanguages = Object.keys(existingLocalizations);
+
+    const missingLanguages = targetLanguages.filter(lang => !existingLanguages.includes(lang));
+
+    console.log('[Translate Video] existingLanguages:', existingLanguages);
+    console.log('[Translate Video] missingLanguages:', missingLanguages);
+
+    if (!missingLanguages.length) {
+      return res.json({
+        success: true,
+        message: 'All configured languages already exist',
+        localizationCount: existingLanguages.length,
+        skipped: true
+      });
+    }
+
+    let localizations = { ...existingLocalizations };
+
+    for (const lang of missingLanguages) {
+      try {
+        console.log(`[Translate Video] translating ${lang}...`);
+
+        await new Promise(resolve => setTimeout(resolve, 3000));
+
+        const result = await buildLocalizedMetadata({
+          title: video.snippet?.title || '',
+          description: video.snippet?.description || '',
+          sourceLanguage,
+          targetLanguages: [lang],
+          maxTitleLength,
+          user
+        });
+
+        if (result && result[lang]) {
+          localizations[lang] = result[lang];
+          console.log(`[Translate Video] success ${lang}`);
+        } else {
+          console.log(`[Translate Video] empty result ${lang}`);
+        }
+      } catch (langError) {
+        console.error(`[Translate Video] failed ${lang}:`, langError.message);
+      }
+    }
+
+    if (!Object.keys(localizations).length) {
+      return res.status(500).json({ success: false, error: 'No localizations generated' });
+    }
+
+    await youtube.videos.update({
+      part: ['snippet'],
+      requestBody: {
+        id: videoId,
+        snippet: {
+          title: video.snippet?.title || '',
+          description: video.snippet?.description || '',
+          categoryId: video.snippet?.categoryId || '22',
+          defaultLanguage: sourceLanguage
+        }
+      }
+    });
+
+    await youtube.videos.update({
+      part: ['localizations'],
+      requestBody: {
+        id: videoId,
+        localizations
+      }
+    });
+
+    return res.json({
+      success: true,
+      message: 'Video translated successfully',
+      localizationCount: Object.keys(localizations).length,
+      addedLanguages: missingLanguages.length,
+      skipped: false
+    });
+  } catch (error) {
+    console.error('Translate single video error:', error.response?.data || error.message || error);
+    return res.status(500).json({ success: false, error: 'Failed to translate video' });
+  }
+});
+
 server.timeout = 30 * 60 * 1000;
 server.keepAliveTimeout = 30 * 60 * 1000;
 server.headersTimeout = 30 * 60 * 1000;
@@ -4655,6 +5199,33 @@ process.on('SIGTERM', async () => {
     console.log('Server closed');
     process.exit(0);
   });
+});
+
+app.post('/api/youtube-channels/:id/localization-settings', isAuthenticated, async (req, res) => {
+  try {
+    const YoutubeChannel = require('./models/YoutubeChannel');
+    const { source_language, localizations, max_title_length } = req.body;
+
+    const channel = await YoutubeChannel.findById(req.params.id);
+    if (!channel) {
+      return res.status(404).json({ success: false, error: 'Channel not found' });
+    }
+
+    if (channel.user_id !== req.session.userId) {
+      return res.status(403).json({ success: false, error: 'Not authorized' });
+    }
+
+    await YoutubeChannel.update(req.params.id, {
+      source_language: source_language || 'en',
+      localizations: JSON.stringify(Array.isArray(localizations) ? localizations : []),
+      max_title_length: parseInt(max_title_length || '100', 10)
+    });
+
+    res.json({ success: true, message: 'Localization settings saved' });
+  } catch (error) {
+    console.error('Error saving channel localization settings:', error);
+    res.status(500).json({ success: false, error: 'Failed to save localization settings' });
+  }
 });
 
 process.on('SIGINT', async () => {

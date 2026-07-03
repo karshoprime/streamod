@@ -930,6 +930,7 @@ function selectRotationChannel(channelId, channelName, channelThumbnail) {
   document.getElementById('rotationChannelId').value = channelId;
   document.getElementById('rotationChannelThumb').src = channelThumbnail;
   document.getElementById('rotationChannelName').textContent = channelName;
+  loadChannelLocalizationSettings(channelId);
   toggleRotationChannelDropdown();
 }
 
@@ -1034,6 +1035,16 @@ async function saveRotation() {
   }
   
   const youtubeChannelId = document.getElementById('rotationChannelId').value;
+
+  const selectedLocalizations = Array.from(
+    document.querySelectorAll('input[name="localizations"]:checked')
+  ).map(cb => cb.value);
+
+  const sourceLanguageEl = document.querySelector('select[name="source_language"]');
+  const maxTitleLengthEl = document.querySelector('input[name="max_title_length"]');
+
+  const sourceLanguage = sourceLanguageEl ? sourceLanguageEl.value : 'en';
+  const maxTitleLength = maxTitleLengthEl ? maxTitleLengthEl.value : 100;
   
   formData.append('name', name);
   formData.append('repeat_mode', repeatMode);
@@ -1041,7 +1052,10 @@ async function saveRotation() {
   formData.append('end_time', endDateTimeStr);
   formData.append('youtube_channel_id', youtubeChannelId);
   formData.append('items', JSON.stringify(items));
-  
+  formData.append('channel_localizations', JSON.stringify(selectedLocalizations));
+  formData.append('channel_source_language', sourceLanguage);
+  formData.append('channel_max_title_length', maxTitleLength); 
+
   try {
     const url = rotationId ? `/api/rotations/${rotationId}` : '/api/rotations';
     const method = rotationId ? 'PUT' : 'POST';
@@ -1083,6 +1097,34 @@ async function saveRotation() {
   }
 }
 
+async function loadChannelLocalizationSettings(channelId) {
+  if (!channelId) return;
+
+  try {
+    const response = await fetch(`/api/youtube-channels/${channelId}/localization-settings`);
+    const result = await response.json();
+
+    if (!result.success) return;
+
+    const sourceSelect = document.querySelector('select[name="source_language"]');
+    const maxLengthInput = document.querySelector('input[name="max_title_length"]');
+
+    if (sourceSelect) {
+      sourceSelect.value = result.source_language || 'en';
+    }
+
+    if (maxLengthInput) {
+      maxLengthInput.value = result.max_title_length || 100;
+    }
+
+    document.querySelectorAll('input[name="localizations"]').forEach(cb => {
+      cb.checked = (result.localizations || []).includes(cb.value);
+    });
+  } catch (err) {
+    console.error('Failed loading channel localization settings:', err);
+  }
+}
+
 async function editRotation(id) {
   try {
     const response = await fetch(`/api/rotations/${id}`);
@@ -1117,6 +1159,7 @@ async function editRotation(id) {
       
       if (rotation.youtube_channel_id) {
         document.getElementById('rotationChannelId').value = rotation.youtube_channel_id;
+loadChannelLocalizationSettings(rotation.youtube_channel_id);
         if (rotation.youtube_channel_name) {
           document.getElementById('rotationChannelName').textContent = rotation.youtube_channel_name;
         }
@@ -1317,5 +1360,14 @@ async function stopRotation(id) {
   } catch (error) {
     showToast('error', 'An error occurred');
   }
+}
+function filterLanguages() {
+  const input = document.getElementById('languageSearch').value.toLowerCase();
+  const items = document.querySelectorAll('.language-item');
+
+  items.forEach(item => {
+    const name = item.querySelector('.language-name').innerText.toLowerCase();
+    item.style.display = name.includes(input) ? '' : 'none';
+  });
 }
 </script>
