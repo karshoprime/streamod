@@ -329,30 +329,37 @@
           </div>
 
                 <div class="bg-dark-900 rounded-lg p-4 border border-gray-700">
-                  <h4 class="text-lg font-semibold mb-1">AI Translation Settings</h4>
-                  <p class="text-gray-400 text-sm mb-4">Choose provider, model, and API key for automatic title/description translation.</p>
+                  <h4 class="text-lg font-semibold mb-1">Translation Settings</h4>
+                  <p class="text-gray-400 text-sm mb-4">Provider used to translate stream titles &amp; descriptions into other languages (YouTube localizations). Google Cloud Translation API is recommended: fast, cheap and supports every YouTube language.</p>
 
-                  <label class="block text-sm font-medium text-gray-300 mb-2">AI Provider</label>
+                  <label class="block text-sm font-medium text-gray-300 mb-2">Provider</label>
                   <select id="aiProvider" class="w-full mb-4 px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-white">
                   </select>
 
-                  <label class="block text-sm font-medium text-gray-300 mb-2">API Key</label>
-                   <div class="flex flex-col sm:flex-row gap-2 mb-2">
+                  <label id="aiApiKeyLabel" class="block text-sm font-medium text-gray-300 mb-2">API Key</label>
+                  <div class="flex flex-col sm:flex-row gap-2 mb-1">
                     <input id="aiApiKey" type="password"
                       class="flex-1 px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-white"
                       placeholder="Enter API key">
-                      <p id="aiApiKeyHelp" class="text-xs text-gray-500 mt-2"></p>
-                      <button type="button" onclick="saveAiSettings()"
+                    <button type="button" onclick="saveAiSettings()"
                       class="px-4 py-2 rounded-lg bg-primary hover:bg-blue-600 text-white transition-colors">
                       Save
                     </button>
+                    <button type="button" id="aiTestBtn" onclick="testAiSettings()"
+                      class="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-white transition-colors">
+                      Test
+                    </button>
                   </div>
+                  <p id="aiProviderHelp" class="text-xs text-gray-500 mb-1"></p>
+                  <p id="aiApiKeyHelp" class="text-xs text-gray-500 mb-2"></p>
 
                   <div id="aiApiKeyStatus" class="mb-4 text-sm text-gray-300"></div>
 
-                  <label class="block text-sm font-medium text-gray-300 mb-2">Model</label>
-                  <select id="aiModel" class="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-white">
-                  </select>
+                  <div id="aiModelWrap">
+                    <label class="block text-sm font-medium text-gray-300 mb-2">Model</label>
+                    <select id="aiModel" class="w-full px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-white">
+                    </select>
+                  </div>
                 </div>
 
 
@@ -1250,7 +1257,7 @@ async function loadAiSettings() {
       providerSelect.appendChild(option);
     });
 
-    providerSelect.value = result.ai_provider || 'openai';
+    providerSelect.value = aiProvidersConfig[result.ai_provider] ? result.ai_provider : 'google';
     populateModels(providerSelect.value, result.ai_model);
 
 const apiKeyInput = document.getElementById('aiApiKey');
@@ -1278,6 +1285,13 @@ function populateModels(provider, selectedModel = null) {
 
   const config = aiProvidersConfig[provider];
   if (!config) return;
+
+  const wrap = document.getElementById('aiModelWrap');
+  if (wrap) wrap.classList.toggle('hidden', !config.models || config.models.length === 0);
+  const keyLabel = document.getElementById('aiApiKeyLabel');
+  if (keyLabel) keyLabel.textContent = config.keyLabel || 'API Key';
+  const providerHelp = document.getElementById('aiProviderHelp');
+  if (providerHelp) providerHelp.textContent = config.keyHelp || '';
 
   config.models.forEach(model => {
     const option = document.createElement('option');
@@ -1326,6 +1340,24 @@ async function saveAiSettings() {
     document.getElementById('aiApiKey').value = '';
   } catch (err) {
     console.error('Failed saving AI settings:', err);
+  }
+}
+
+async function testAiSettings() {
+  const statusEl = document.getElementById('aiApiKeyStatus');
+  const btn = document.getElementById('aiTestBtn');
+  btn.disabled = true;
+  statusEl.textContent = 'Testing provider…';
+  try {
+    const response = await fetch('/api/ai-settings/test', { method: 'POST' });
+    const result = await response.json();
+    statusEl.textContent = result.success ? result.message : (result.error || 'Test failed');
+    statusEl.className = `mb-4 text-sm ${result.success ? 'text-green-400' : 'text-red-400'}`;
+  } catch (err) {
+    statusEl.textContent = 'Test failed';
+    statusEl.className = 'mb-4 text-sm text-red-400';
+  } finally {
+    btn.disabled = false;
   }
 }
 

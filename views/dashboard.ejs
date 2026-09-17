@@ -628,16 +628,8 @@
                     </label>
                   </div>
 
-                  <div class="h-[42px] flex items-center justify-between">
-                    <div class="flex items-center gap-2">
-                      <label class="text-sm text-gray-300">Enable Monetization</label>
-                    </div>
-                    <label class="relative inline-flex items-center cursor-pointer">
-                      <input type="checkbox" id="ytEnableMonetization" class="sr-only peer">
-                      <div class="w-11 h-6 bg-dark-700 rounded-full peer peer-checked:bg-primary"></div>
-                      <div class="absolute left-[2px] top-[2px] w-5 h-5 bg-white rounded-full transition-all peer-checked:translate-x-5"></div>
-                    </label>
-                  </div>
+                  <div id="ytAdPanelContainer"></div>
+                  <div id="ytLangPanelContainer"></div>
 
                   <div id="ytScheduleSettings" class="hidden space-y-4">
                     <div>
@@ -1086,16 +1078,8 @@
                     </label>
                   </div>
 
-                  <div class="h-[42px] flex items-center justify-between">
-                    <div class="flex items-center gap-2">
-                      <label class="text-sm text-gray-300">Enable Monetization</label>
-                    </div>
-                    <label class="relative inline-flex items-center cursor-pointer">
-                      <input type="checkbox" id="editYtEnableMonetization" class="sr-only peer">
-                      <div class="w-11 h-6 bg-dark-700 rounded-full peer peer-checked:bg-primary"></div>
-                      <div class="absolute left-[2px] top-[2px] w-5 h-5 bg-white rounded-full transition-all peer-checked:translate-x-5"></div>
-                    </label>
-                  </div>
+                  <div id="editYtAdPanelContainer"></div>
+                  <div id="editYtLangPanelContainer"></div>
 
                   <div id="editYtScheduleSettings" class="hidden space-y-4">
                     <div>
@@ -1607,7 +1591,32 @@
     
     document.addEventListener('DOMContentLoaded', function() {
       updateToggleDisplay('both');
+      if (window.StreamodAds) StreamodAds.render('ytAdPanelContainer', 'yt', null);
+      if (window.StreamodLang) StreamodLang.render('ytLangPanelContainer', 'yt', { selected: [], sourceLanguage: 'en' });
     });
+
+    function resetYtMonetizationPanels() {
+      if (window.StreamodAds) StreamodAds.render('ytAdPanelContainer', 'yt', null);
+      if (window.StreamodLang) StreamodLang.render('ytLangPanelContainer', 'yt', { selected: [], sourceLanguage: 'en' });
+    }
+
+    function getMonetizationButtonHTML(stream, variant) {
+      const isYt = stream.is_youtube_api === true || stream.is_youtube_api === 1;
+      if (!isYt) return '';
+      const size = variant === 'mobile' ? 'p-1 text-sm' : 'p-1.5';
+      const live = stream.status === 'live';
+      const on = stream.youtube_monetization === true || stream.youtube_monetization === 1;
+      const safeTitle = String(stream.title || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+      return `<button class="${size} hover:bg-dark-700 rounded transition-colors" title="${live ? 'Live monetization – ad breaks, run ad break, translate' : 'Monetization & translation'}"
+                onclick="openLiveMonetization('${stream.id}', '${safeTitle}')">
+                <i class="ti ti-coin ${on ? 'text-yellow-400' : 'text-gray-400'} hover:text-yellow-300"></i>
+              </button>`;
+    }
+
+    function openLiveMonetization(streamId, title) {
+      if (!window.StreamodLiveMonetization) return;
+      StreamodLiveMonetization.open(streamId, { title });
+    }
     
     updateSystemStats();
     setInterval(updateSystemStats, 5000);
@@ -1641,7 +1650,11 @@
           if (scheduleEnd) ytFormData.scheduleEndTime = scheduleEnd;
         }
 
-        ytFormData.ytMonetization = document.getElementById('ytEnableMonetization').checked;
+        const ytAdSettings = window.StreamodAds ? StreamodAds.read('yt') : { enabled: false };
+        ytFormData.ytMonetization = ytAdSettings.enabled;
+        ytFormData.ytAdSettings = JSON.stringify(ytAdSettings);
+        ytFormData.ytLocalizations = JSON.stringify(window.StreamodLang ? StreamodLang.read('yt') : []);
+        ytFormData.ytSourceLanguage = window.StreamodLang ? StreamodLang.readSource('yt') : 'en';
         
         const createBtn = document.querySelector('#newStreamModal button[type="submit"]');
         const originalBtnText = createBtn.innerHTML;
@@ -2019,6 +2032,7 @@
         <div>${statusBadge}</div>
         <div class="flex items-center gap-1.5">
           ${getActionButtonHTML(stream.status, stream.id, 'mobile')}
+          ${getMonetizationButtonHTML(stream, 'mobile')}
           <button class="p-1 hover:bg-dark-700 rounded transition-colors ${stream.status === 'live' || stream.status === 'scheduled' ? 'opacity-50 cursor-not-allowed' : ''}" onclick="${stream.status === 'live' || stream.status === 'scheduled' ? '' : `editStream('${stream.id}')`}" ${stream.status === 'live' || stream.status === 'scheduled' ? 'disabled' : ''}><i class="ti ti-edit text-gray-400 hover:text-white text-sm"></i></button>
           <button class="p-1 hover:bg-dark-700 rounded transition-colors ${stream.status === 'live' || stream.status === 'scheduled' ? 'opacity-50 cursor-not-allowed' : ''}" onclick="${stream.status === 'live' || stream.status === 'scheduled' ? '' : `deleteStream('${stream.id}')`}" ${stream.status === 'live' || stream.status === 'scheduled' ? 'disabled' : ''}><i class="ti ti-trash text-gray-400 hover:text-red-400 text-sm"></i></button>
         </div>
@@ -2155,6 +2169,7 @@
         <div class="flex items-center justify-end space-x-2">
           ${getActionButtonHTML(stream.status, stream.id, 'desktop')}
           <div class="ml-2 flex items-center gap-1">
+            ${getMonetizationButtonHTML(stream, 'desktop')}
             <button class="p-1.5 hover:bg-dark-700 rounded transition-colors ${stream.status === 'live' || stream.status === 'scheduled' ? 'opacity-50 cursor-not-allowed' : ''}" 
                     onclick="${stream.status === 'live' || stream.status === 'scheduled' ? '' : `editStream('${stream.id}')`}"
                     ${stream.status === 'live' || stream.status === 'scheduled' ? 'disabled' : ''}>
@@ -3197,7 +3212,18 @@
         editYtTags = stream.youtube_tags ? stream.youtube_tags.split(',').filter(t => t.trim()) : [];
         renderEditYtTags();
 
-        document.getElementById('editYtEnableMonetization').checked = stream.youtube_monetization === true || stream.youtube_monetization === 1;
+        if (window.StreamodAds) {
+          StreamodAds.render('editYtAdPanelContainer', 'editYt',
+            stream.youtube_ad_settings || { enabled: stream.youtube_monetization === true || stream.youtube_monetization === 1 });
+        }
+        if (window.StreamodLang) {
+          let editLangs = [];
+          try { editLangs = JSON.parse(stream.youtube_localizations || '[]'); } catch (e) { editLangs = []; }
+          StreamodLang.render('editYtLangPanelContainer', 'editYt', {
+            selected: editLangs,
+            sourceLanguage: stream.youtube_source_language || 'en'
+          });
+        }
 
         if (stream.video_id) {
           document.getElementById('editYtSelectedVideoId').value = stream.video_id;
@@ -3686,7 +3712,11 @@
               ytChannelId: document.getElementById('editYtSelectedChannelId')?.value || ''
             };
 
-            ytFormDataObj.ytMonetization = document.getElementById('editYtEnableMonetization').checked;
+            const editAdSettings = window.StreamodAds ? StreamodAds.read('editYt') : { enabled: false };
+            ytFormDataObj.ytMonetization = editAdSettings.enabled;
+            ytFormDataObj.ytAdSettings = JSON.stringify(editAdSettings);
+            ytFormDataObj.ytLocalizations = JSON.stringify(window.StreamodLang ? StreamodLang.read('editYt') : []);
+            ytFormDataObj.ytSourceLanguage = window.StreamodLang ? StreamodLang.readSource('editYt') : 'en';
             
             const enableSchedule = document.getElementById('editYtEnableSchedule').checked;
             if (enableSchedule) {

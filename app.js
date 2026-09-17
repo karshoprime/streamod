@@ -32,6 +32,23 @@ const MediaFolder = require('./models/MediaFolder');
 const Playlist = require('./models/Playlist');
 const languages = require('./config/languages');
 const aiProviders = require('./config/aiProviders');
+
+/**
+ * Accepts a JSON array string, an array, or a comma separated list of language codes.
+ */
+function parseLanguageInput(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return [];
+    if (trimmed.startsWith('[')) {
+      try { return JSON.parse(trimmed); } catch (err) { return []; }
+    }
+    return trimmed.split(',').map(v => v.trim()).filter(Boolean);
+  }
+  return [];
+}
 const Stream = require('./models/Stream');
 const ffmpeg = require('fluent-ffmpeg');
 const ffmpegInstaller = require('@ffmpeg-installer/ffmpeg');
@@ -1643,8 +1660,8 @@ app.get('/api/ai-settings', isAuthenticated, async (req, res) => {
 
     res.json({
       success: true,
-      ai_provider: user.ai_provider || 'openai',
-      ai_model: user.ai_model || 'gpt-4o-mini',
+      ai_provider: user.ai_provider || 'google',
+      ai_model: user.ai_model || '',
       ai_api_key_saved: !!user.ai_api_key,
       providers: aiProviders
     });
@@ -1659,17 +1676,43 @@ app.post('/api/ai-settings', isAuthenticated, async (req, res) => {
     const User = require('./models/User');
     const { ai_provider, ai_model, ai_api_key } = req.body;
 
+    const provider = aiProviders[ai_provider] ? ai_provider : 'google';
+    const providerModels = aiProviders[provider].models || [];
+    const model = providerModels.includes(ai_model) ? ai_model : (providerModels[0] || '');
+
     await User.update(req.session.userId, {
-      ai_provider: ai_provider || 'openai',
-      ai_model: ai_model || 'gpt-4o-mini',
-      ...(ai_api_key ? { ai_api_key } : {})
+      ai_provider: provider,
+      ai_model: model,
+      ...(ai_api_key ? { ai_api_key: String(ai_api_key).trim() } : {})
     });
 
-    res.json({ success: true, message: 'AI settings saved' });
+    res.json({ success: true, message: 'Translation settings saved' });
   } catch (error) {
     console.error('Error saving AI settings:', error);
     res.status(500).json({ success: false, error: 'Failed to save AI settings' });
   }
+});
+
+app.post('/api/ai-settings/test', isAuthenticated, async (req, res) => {
+  try {
+    const User = require('./models/User');
+    const { testTranslationProvider } = require('./services/translationService');
+    const user = await User.findById(req.session.userId);
+    if (!user.ai_api_key) {
+      return res.status(400).json({ success: false, error: 'No API key saved yet' });
+    }
+    const sample = await testTranslationProvider(user);
+    res.json({ success: true, message: `Provider OK – "Hello world" → "${sample}"` });
+  } catch (error) {
+    const detail = error.response?.data?.error?.message || error.message;
+    console.error('Translation provider test failed:', detail);
+    res.status(400).json({ success: false, error: `Provider test failed: ${detail}` });
+  }
+});
+
+app.get('/api/languages', isAuthenticated, (req, res) => {
+  const { YOUTUBE_LANGUAGES, LANGUAGE_PRESETS } = require('./config/youtubeLanguages');
+  res.json({ success: true, languages: YOUTUBE_LANGUAGES, presets: LANGUAGE_PRESETS });
 });
 
 app.post('/settings/integrations/gdrive', isAuthenticated, [
@@ -3485,7 +3528,13 @@ app.post('/api/streams/youtube', isAuthenticated, uploadThumbnail.single('thumbn
         error: 'YouTube API credentials not configured.' 
       });
     }
-    const { videoId, title, description, privacy, category, tags, loopVideo, scheduleStartTime, scheduleEndTime, repeat, ytChannelId, ytMonetization } = req.body;
+    const { videoId, title, description, privacy, category, tags, loopVideo, scheduleStartTime, scheduleEndTime, repeat, ytChannelId, ytMonetization, ytAdSettings, ytLocalizations, ytSourceLanguage } = req.body;
+    const { normalizeAdSettings } = require('./services/adSettings');
+    const { sanitizeLanguageList, isValidLanguage } = require('./config/youtubeLanguages');
+
+    const adSettings = normalizeAdSettings(ytAdSettings, ytMonetization);
+    const localizations = sanitizeLanguageList(parseLanguageInput(ytLocalizations));
+    const sourceLanguage = isValidLanguage(ytSourceLanguage) ? ytSourceLanguage : null;
     
     let selectedChannel;
     if (ytChannelId) {
@@ -3551,7 +3600,10 @@ app.post('/api/streams/youtube', isAuthenticated, uploadThumbnail.single('thumbn
       youtube_thumbnail: localThumbnailPath,
       youtube_channel_id: selectedChannel.id,
       is_youtube_api: true,
-      youtube_monetization: ytMonetization === 'true' || ytMonetization === true
+      youtube_monetization: adSettings.enabled,
+      youtube_ad_settings: JSON.stringify(adSettings),
+      youtube_localizations: JSON.stringify(localizations),
+      youtube_source_language: sourceLanguage
     };
     
     if (scheduleStartTime) {
@@ -3668,8 +3720,27 @@ app.put('/api/streams/:id', isAuthenticated, uploadThumbnail.single('thumbnail')
       if (req.body.loopVideo !== undefined) {
         updateData.loop_video = req.body.loopVideo === 'true' || req.body.loopVideo === true;
       }
-      if (req.body.ytMonetization !== undefined) {
-        updateData.youtube_monetization = req.body.ytMonetization === 'true' || req.body.ytMonetization === true;
+      const { normalizeAdSettings } = require('./services/adSettings');
+      const { sanitizeLanguageList, isValidLanguage } = require('./config/youtubeLanguages');
+
+      let newAdSettings = null;
+      if (req.body.ytAdSettings !== undefined || req.body.ytMonetization !== undefined) {
+        const base = normalizeAdSettings(stream.youtube_ad_settings, stream.youtube_monetization);
+        const incoming = req.body.ytAdSettings !== undefined
+          ? normalizeAdSettings(req.body.ytAdSettings, req.body.ytMonetization)
+          : { ...base, enabled: req.body.ytMonetization === 'true' || req.body.ytMonetization === true };
+        newAdSettings = normalizeAdSettings(incoming);
+        updateData.youtube_monetization = newAdSettings.enabled;
+        updateData.youtube_ad_settings = JSON.stringify(newAdSettings);
+      }
+
+      let newLocalizations = null;
+      if (req.body.ytLocalizations !== undefined) {
+        newLocalizations = sanitizeLanguageList(parseLanguageInput(req.body.ytLocalizations));
+        updateData.youtube_localizations = JSON.stringify(newLocalizations);
+      }
+      if (req.body.ytSourceLanguage !== undefined) {
+        updateData.youtube_source_language = isValidLanguage(req.body.ytSourceLanguage) ? req.body.ytSourceLanguage : null;
       }
       
       if (req.body.scheduleStartTime) {
@@ -3767,14 +3838,28 @@ app.put('/api/streams/:id', isAuthenticated, uploadThumbnail.single('thumbnail')
                 console.log('Note: Could not update broadcast status:', statusError.message);
               }
 
-              if (req.body.ytMonetization !== undefined) {
+              if (newAdSettings) {
                 try {
                   const { syncBroadcastMonetization } = require('./services/youtubeService');
-                  const shouldEnableMonetization = req.body.ytMonetization === 'true' || req.body.ytMonetization === true;
-                  await syncBroadcastMonetization(youtube, stream.youtube_broadcast_id, shouldEnableMonetization);
+                  await syncBroadcastMonetization(youtube, stream.youtube_broadcast_id, newAdSettings);
                 } catch (monetizationError) {
                   console.log('Note: Could not update broadcast monetization:', monetizationError.message);
-                  updateData.youtube_monetization = false;
+                }
+              }
+
+              if (newLocalizations && newLocalizations.length > 0) {
+                try {
+                  const { applyBroadcastLocalizations } = require('./services/youtubeService');
+                  await applyBroadcastLocalizations(youtube, stream.youtube_broadcast_id, {
+                    user,
+                    title: req.body.title || stream.title,
+                    description: req.body.description !== undefined ? req.body.description : (stream.youtube_description || ''),
+                    sourceLanguage: updateData.youtube_source_language || stream.youtube_source_language || selectedChannel.source_language || 'en',
+                    targetLanguages: newLocalizations,
+                    maxTitleLength: selectedChannel.max_title_length || 100
+                  });
+                } catch (locError) {
+                  console.log('Note: Could not apply localizations:', locError.message);
                 }
               }
               
@@ -3930,6 +4015,207 @@ app.put('/api/streams/:id', isAuthenticated, uploadThumbnail.single('thumbnail')
     res.status(500).json({ success: false, error: 'Failed to update stream' });
   }
 });
+/* ------------------------------------------------------------------ */
+/* Live monetization (YouTube Studio-style) + on-demand translation     */
+/* ------------------------------------------------------------------ */
+
+function getRequestRedirectUri(req) {
+  const protocol = req.headers['x-forwarded-proto'] || req.protocol;
+  const host = req.headers['x-forwarded-host'] || req.get('host');
+  return `${protocol}://${host}/auth/youtube/callback`;
+}
+
+async function loadOwnedYoutubeStream(req, res) {
+  const stream = await Stream.findById(req.params.id);
+  if (!stream) {
+    res.status(404).json({ success: false, error: 'Stream not found' });
+    return null;
+  }
+  if (stream.user_id !== req.session.userId) {
+    res.status(403).json({ success: false, error: 'Not authorized' });
+    return null;
+  }
+  if (!(stream.is_youtube_api === true || stream.is_youtube_api === 1)) {
+    res.status(400).json({ success: false, error: 'Monetization is only available for YouTube API streams' });
+    return null;
+  }
+  return stream;
+}
+
+function describeYoutubeError(error) {
+  return error?.response?.data?.error?.message
+    || error?.errors?.[0]?.message
+    || error?.message
+    || 'Unknown YouTube API error';
+}
+
+// Current monetization state: stored settings + live state from YouTube (when a broadcast exists)
+app.get('/api/streams/:id/monetization', isAuthenticated, async (req, res) => {
+  try {
+    const stream = await loadOwnedYoutubeStream(req, res);
+    if (!stream) return;
+
+    const { normalizeAdSettings, describeAdSettings, AD_BREAK_DURATIONS, INTERVAL_OPTIONS } = require('./services/adSettings');
+    const settings = normalizeAdSettings(stream.youtube_ad_settings, stream.youtube_monetization);
+
+    const payload = {
+      success: true,
+      streamId: stream.id,
+      streamStatus: stream.status,
+      broadcastId: stream.youtube_broadcast_id || null,
+      settings,
+      summary: describeAdSettings(settings),
+      adBreakDurations: AD_BREAK_DURATIONS,
+      intervalOptions: INTERVAL_OPTIONS,
+      live: null,
+      liveError: null
+    };
+
+    if (stream.youtube_broadcast_id) {
+      try {
+        const youtubeService = require('./services/youtubeService');
+        const { youtube } = await youtubeService.getYouTubeClientForStream(stream, getRequestRedirectUri(req));
+        payload.live = await youtubeService.getBroadcastMonetization(youtube, stream.youtube_broadcast_id);
+      } catch (liveError) {
+        payload.liveError = describeYoutubeError(liveError);
+      }
+    }
+
+    res.json(payload);
+  } catch (error) {
+    console.error('Error loading monetization:', error);
+    res.status(500).json({ success: false, error: 'Failed to load monetization settings' });
+  }
+});
+
+// Save settings; when the broadcast already exists (scheduled/live) they are pushed to YouTube immediately
+app.put('/api/streams/:id/monetization', isAuthenticated, async (req, res) => {
+  try {
+    const stream = await loadOwnedYoutubeStream(req, res);
+    if (!stream) return;
+
+    const { normalizeAdSettings, describeAdSettings } = require('./services/adSettings');
+    const settings = normalizeAdSettings(req.body.settings !== undefined ? req.body.settings : req.body);
+
+    let synced = false;
+    let syncError = null;
+
+    if (stream.youtube_broadcast_id) {
+      try {
+        const youtubeService = require('./services/youtubeService');
+        const { youtube } = await youtubeService.getYouTubeClientForStream(stream, getRequestRedirectUri(req));
+        await youtubeService.syncBroadcastMonetization(youtube, stream.youtube_broadcast_id, settings);
+        synced = true;
+      } catch (error) {
+        syncError = describeYoutubeError(error);
+        console.error('Monetization sync failed:', syncError);
+      }
+    }
+
+    await Stream.update(stream.id, {
+      youtube_monetization: settings.enabled,
+      youtube_ad_settings: JSON.stringify(settings)
+    });
+
+    res.json({
+      success: true,
+      settings,
+      summary: describeAdSettings(settings),
+      synced,
+      syncError,
+      message: synced
+        ? 'Monetization settings applied to the live broadcast'
+        : (syncError ? `Saved locally, but YouTube rejected the update: ${syncError}` : 'Monetization settings saved (applied when the broadcast is created)')
+    });
+  } catch (error) {
+    console.error('Error saving monetization:', error);
+    res.status(500).json({ success: false, error: 'Failed to save monetization settings' });
+  }
+});
+
+// "Run ad break" – inserts a manual ad cuepoint into the live broadcast
+app.post('/api/streams/:id/monetization/ad-break', isAuthenticated, async (req, res) => {
+  try {
+    const stream = await loadOwnedYoutubeStream(req, res);
+    if (!stream) return;
+
+    if (!stream.youtube_broadcast_id) {
+      return res.status(400).json({ success: false, error: 'The broadcast has not been created yet' });
+    }
+
+    const { normalizeAdSettings } = require('./services/adSettings');
+    const settings = normalizeAdSettings(stream.youtube_ad_settings, stream.youtube_monetization);
+    const duration = parseInt(req.body.durationSecs, 10) || settings.adBreakDuration;
+
+    const youtubeService = require('./services/youtubeService');
+    const { youtube } = await youtubeService.getYouTubeClientForStream(stream, getRequestRedirectUri(req));
+    const cuepoint = await youtubeService.insertAdBreak(youtube, stream.youtube_broadcast_id, duration);
+
+    res.json({ success: true, cuepoint, message: `Ad break (${duration}s) inserted` });
+  } catch (error) {
+    const detail = describeYoutubeError(error);
+    console.error('Ad break failed:', detail);
+    res.status(400).json({ success: false, error: `Could not run ad break: ${detail}` });
+  }
+});
+
+// Translate title/description now and push localizations to the existing broadcast
+app.post('/api/streams/:id/translate', isAuthenticated, async (req, res) => {
+  try {
+    const stream = await loadOwnedYoutubeStream(req, res);
+    if (!stream) return;
+
+    if (!stream.youtube_broadcast_id) {
+      return res.status(400).json({ success: false, error: 'The broadcast has not been created yet. Languages are saved and will be applied when the stream starts.' });
+    }
+
+    const { sanitizeLanguageList, isValidLanguage } = require('./config/youtubeLanguages');
+    let languages = sanitizeLanguageList(parseLanguageInput(req.body.languages));
+    if (!languages.length) {
+      try { languages = sanitizeLanguageList(JSON.parse(stream.youtube_localizations || '[]')); } catch (e) { languages = []; }
+    }
+    if (!languages.length) {
+      return res.status(400).json({ success: false, error: 'No languages selected' });
+    }
+
+    const youtubeService = require('./services/youtubeService');
+    const { user, channel, youtube } = await youtubeService.getYouTubeClientForStream(stream, getRequestRedirectUri(req));
+    if (!user.ai_api_key) {
+      return res.status(400).json({ success: false, error: 'No translation API key configured (Settings → Integration)' });
+    }
+
+    const sourceLanguage = isValidLanguage(req.body.sourceLanguage)
+      ? req.body.sourceLanguage
+      : (stream.youtube_source_language || channel.source_language || 'en');
+
+    const localizations = await youtubeService.applyBroadcastLocalizations(youtube, stream.youtube_broadcast_id, {
+      user,
+      title: stream.title,
+      description: stream.youtube_description || '',
+      sourceLanguage,
+      targetLanguages: languages,
+      maxTitleLength: channel.max_title_length || 100
+    });
+
+    await Stream.update(stream.id, {
+      youtube_localizations: JSON.stringify(languages),
+      youtube_source_language: sourceLanguage
+    });
+
+    const count = Object.keys(localizations).length;
+    res.json({
+      success: true,
+      applied: Object.keys(localizations),
+      failed: languages.filter(l => !localizations[l] && l !== sourceLanguage),
+      message: count ? `${count} language(s) applied to the broadcast` : 'No translations could be generated'
+    });
+  } catch (error) {
+    const detail = describeYoutubeError(error);
+    console.error('Translate stream failed:', detail);
+    res.status(400).json({ success: false, error: `Translation failed: ${detail}` });
+  }
+});
+
 app.delete('/api/streams/:id', isAuthenticated, async (req, res) => {
   try {
     const stream = await Stream.findById(req.params.id);
@@ -4425,6 +4711,57 @@ app.get('/api/rotations/:id', isAuthenticated, async (req, res) => {
   }
 });
 
+/**
+ * Rotation-level YouTube Studio ad settings + translation settings (shared by all items).
+ */
+function parseRotationSettings(body) {
+  const { normalizeAdSettings } = require('./services/adSettings');
+  const { sanitizeLanguageList, isValidLanguage } = require('./config/youtubeLanguages');
+
+  const adSettings = normalizeAdSettings(
+    body.youtube_ad_settings,
+    body.youtube_monetization !== undefined ? body.youtube_monetization : undefined
+  );
+  const localizations = sanitizeLanguageList(parseLanguageInput(body.youtube_localizations));
+  const sourceLanguage = isValidLanguage(body.youtube_source_language) ? body.youtube_source_language : null;
+
+  return {
+    adSettings,
+    localizations,
+    sourceLanguage,
+    rotationFields: {
+      youtube_ad_settings: JSON.stringify(adSettings),
+      youtube_localizations: JSON.stringify(localizations),
+      youtube_source_language: sourceLanguage
+    }
+  };
+}
+
+// Which stream record is currently running for a rotation (used by the live monetization panel)
+app.get('/api/rotations/:id/active-stream', isAuthenticated, async (req, res) => {
+  try {
+    const rotation = await Rotation.findById(req.params.id);
+    if (!rotation) {
+      return res.status(404).json({ success: false, error: 'Rotation not found' });
+    }
+    if (rotation.user_id !== req.session.userId) {
+      return res.status(403).json({ success: false, error: 'Not authorized' });
+    }
+
+    const streams = await Stream.findAll(req.session.userId);
+    let active = null;
+    if (rotation.youtube_stream_id) {
+      const matches = streams.filter(s => s.youtube_stream_id === rotation.youtube_stream_id && s.youtube_broadcast_id);
+      active = matches.find(s => s.status === 'live') || matches[matches.length - 1] || null;
+    }
+
+    res.json({ success: true, stream: active ? { id: active.id, status: active.status, title: active.title, youtube_broadcast_id: active.youtube_broadcast_id } : null });
+  } catch (error) {
+    console.error('Error loading rotation active stream:', error);
+    res.status(500).json({ success: false, error: 'Failed to load rotation stream' });
+  }
+});
+
 app.post('/api/rotations', isAuthenticated, uploadThumbnail.any(), async (req, res) => {
   try {
     const { name, repeat_mode, start_time, end_time, items, youtube_channel_id } = req.body;
@@ -4432,22 +4769,14 @@ app.post('/api/rotations', isAuthenticated, uploadThumbnail.any(), async (req, r
     const parsedItems = typeof items === 'string' ? JSON.parse(items) : items;
     
     if (!name || !parsedItems || parsedItems.length === 0) {
-const {
-  name,
-  repeat_mode,
-  start_time,
-  end_time,
-  items,
-  youtube_channel_id,
-  channel_localizations,
-  channel_source_language,
-  channel_max_title_length
-} = req.body;
+      return res.status(400).json({ success: false, error: 'Rotation name and at least one item are required' });
     }
     
     if (!start_time || !end_time) {
       return res.status(400).json({ success: false, error: 'Start time and end time are required' });
     }
+
+    const rotationSettings = parseRotationSettings(req.body);
     
     const rotation = await Rotation.create({
       user_id: req.session.userId,
@@ -4458,6 +4787,8 @@ const {
       repeat_mode: repeat_mode || 'daily',
       youtube_channel_id: youtube_channel_id || null
     });
+
+    await Rotation.update(rotation.id, rotationSettings.rotationFields);
     
     const uploadedFiles = req.files || [];
     const uploadedFileMap = new Map(
@@ -4496,7 +4827,8 @@ const {
         original_thumbnail_path: originalThumbnailPath,
         privacy: item.privacy || 'unlisted',
         category: item.category || '22',
-        youtube_monetization: item.youtube_monetization === true || item.youtube_monetization === 'true'
+        youtube_monetization: rotationSettings.adSettings.enabled,
+        youtube_ad_settings: JSON.stringify(rotationSettings.adSettings)
       });
     }
     
@@ -4540,19 +4872,10 @@ app.put('/api/rotations/:id', isAuthenticated, uploadThumbnail.any(), async (req
 
 const YoutubeChannel = require('./models/YoutubeChannel');
     
-const {
-  name,
-  repeat_mode,
-  start_time,
-  end_time,
-  items,
-  youtube_channel_id,
-  channel_localizations,
-  channel_source_language,
-  channel_max_title_length
-} = req.body;
+    const { name, repeat_mode, start_time, end_time, items, youtube_channel_id } = req.body;
     
     const parsedItems = typeof items === 'string' ? JSON.parse(items) : items;
+    const rotationSettings = parseRotationSettings(req.body);
     
     await Rotation.update(req.params.id, {
       name,
@@ -4560,20 +4883,9 @@ const {
       start_time,
       end_time,
       repeat_mode: repeat_mode || 'daily',
-      youtube_channel_id: youtube_channel_id || null
+      youtube_channel_id: youtube_channel_id || null,
+      ...rotationSettings.rotationFields
     });
-
-      if (youtube_channel_id) {
-        const parsedLocalizations = channel_localizations
-          ? JSON.parse(channel_localizations)
-          : [];
-
-        await YoutubeChannel.update(youtube_channel_id, {
-          source_language: channel_source_language || 'en',
-          localizations: JSON.stringify(parsedLocalizations),
-          max_title_length: parseInt(channel_max_title_length || '100', 10)
-        });
-      }
 
       const currentRotation = await Rotation.findById(req.params.id);
 
@@ -4621,7 +4933,8 @@ const uploadedFileMap = new Map(
             original_thumbnail_path: originalThumbnailPath,
             privacy: item.privacy || 'unlisted',
             category: item.category || '22',
-            youtube_monetization: item.youtube_monetization === true || item.youtube_monetization === 'true'
+            youtube_monetization: rotationSettings.adSettings.enabled,
+            youtube_ad_settings: JSON.stringify(rotationSettings.adSettings)
           });
         }
 
@@ -4677,7 +4990,8 @@ const uploadedFileMap = new Map(
           original_thumbnail_path: originalThumbnailPath,
           privacy: item.privacy || 'unlisted',
           category: item.category || '22',
-          youtube_monetization: item.youtube_monetization === true || item.youtube_monetization === 'true'
+          youtube_monetization: rotationSettings.adSettings.enabled,
+          youtube_ad_settings: JSON.stringify(rotationSettings.adSettings)
         });
       }    
     
@@ -4806,11 +5120,14 @@ app.get('/translate', isAuthenticated, async (req, res) => {
     const YoutubeChannel = require('./models/YoutubeChannel');
     const youtubeChannels = await YoutubeChannel.findAll(req.session.userId);
 
+    const { YOUTUBE_LANGUAGES, LANGUAGE_PRESETS } = require('./config/youtubeLanguages');
     res.render('translate', {
       title: 'Translate',
       active: 'translate',
       user: req.session.user,
-      youtubeChannels
+      youtubeChannels,
+      languages: YOUTUBE_LANGUAGES,
+      presets: LANGUAGE_PRESETS
     });
   } catch (error) {
     console.error('Translate page error:', error);
@@ -5044,7 +5361,6 @@ app.post('/api/translate/video', isAuthenticated, async (req, res) => {
     const User = require('./models/User');
     const { google } = require('googleapis');
     const { decrypt } = require('./utils/encryption');
-    const { buildLocalizedMetadata } = require('./services/translationService');
 
     const user = await User.findById(req.session.userId);
     const selectedChannel = await YoutubeChannel.findById(channelId);
@@ -5120,33 +5436,22 @@ app.post('/api/translate/video', isAuthenticated, async (req, res) => {
       });
     }
 
-    let localizations = { ...existingLocalizations };
-
-    for (const lang of missingLanguages) {
-      try {
-        console.log(`[Translate Video] translating ${lang}...`);
-
-        await new Promise(resolve => setTimeout(resolve, 3000));
-
-        const result = await buildLocalizedMetadata({
-          title: video.snippet?.title || '',
-          description: video.snippet?.description || '',
-          sourceLanguage,
-          targetLanguages: [lang],
-          maxTitleLength,
-          user
-        });
-
-        if (result && result[lang]) {
-          localizations[lang] = result[lang];
-          console.log(`[Translate Video] success ${lang}`);
-        } else {
-          console.log(`[Translate Video] empty result ${lang}`);
-        }
-      } catch (langError) {
-        console.error(`[Translate Video] failed ${lang}:`, langError.message);
-      }
+    if (!user.ai_api_key) {
+      return res.status(400).json({ success: false, error: 'No translation API key configured (Settings → Integration)' });
     }
+
+    const { translateMetadata } = require('./services/translationService');
+    const generated = await translateMetadata({
+      title: video.snippet?.title || '',
+      description: video.snippet?.description || '',
+      sourceLanguage,
+      targetLanguages: missingLanguages,
+      maxTitleLength,
+      user,
+      onProgress: (p) => console.log(`[Translate Video] ${p.index}/${p.total} ${p.language} ${p.ok ? 'ok' : 'failed'}`)
+    });
+
+    const localizations = { ...existingLocalizations, ...generated };
 
     if (!Object.keys(localizations).length) {
       return res.status(500).json({ success: false, error: 'No localizations generated' });
@@ -5177,7 +5482,8 @@ app.post('/api/translate/video', isAuthenticated, async (req, res) => {
       success: true,
       message: 'Video translated successfully',
       localizationCount: Object.keys(localizations).length,
-      addedLanguages: missingLanguages.length,
+      addedLanguages: Object.keys(generated).length,
+      failedLanguages: missingLanguages.filter(l => !generated[l]),
       skipped: false
     });
   } catch (error) {

@@ -199,14 +199,15 @@ class Rotation {
       original_thumbnail_path = null,
       privacy = 'unlisted',
       category = '22',
-      youtube_monetization = false
+      youtube_monetization = false,
+      youtube_ad_settings = null
     } = itemData;
 
     return new Promise((resolve, reject) => {
       db.run(
-        `INSERT INTO rotation_items (id, rotation_id, order_index, video_id, title, description, tags, thumbnail_path, original_thumbnail_path, privacy, category, youtube_monetization)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [id, rotation_id, order_index, video_id, title, description, tags, thumbnail_path, original_thumbnail_path, privacy, category, youtube_monetization ? 1 : 0],
+        `INSERT INTO rotation_items (id, rotation_id, order_index, video_id, title, description, tags, thumbnail_path, original_thumbnail_path, privacy, category, youtube_monetization, youtube_ad_settings)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [id, rotation_id, order_index, video_id, title, description, tags, thumbnail_path, original_thumbnail_path, privacy, category, youtube_monetization ? 1 : 0, youtube_ad_settings],
         function(err) {
           if (err) {
             console.error('Error adding rotation item:', err.message);

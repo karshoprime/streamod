@@ -36,6 +36,7 @@ function closeNewStreamModal() {
   const durationBadge = document.getElementById('durationBadge');
   if (durationBadge) durationBadge.classList.add('hidden');
   if (typeof resetYtTags === 'function') resetYtTags();
+  if (typeof resetYtMonetizationPanels === 'function') resetYtMonetizationPanels();
   const ytThumbnailPreview = document.getElementById('ytThumbnailPreview');
   const ytThumbnailPlaceholder = document.getElementById('ytThumbnailPlaceholder');
   const ytThumbnailInput = document.getElementById('ytThumbnail');
@@ -216,6 +217,7 @@ function resetModalForm() {
   const ytScheduleSettings = document.getElementById('ytScheduleSettings');
   if (ytScheduleSettings) ytScheduleSettings.classList.add('hidden');
   if (typeof resetYtTags === 'function') resetYtTags();
+  if (typeof resetYtMonetizationPanels === 'function') resetYtMonetizationPanels();
   const ytEnableSchedule = document.getElementById('ytEnableSchedule');
   if (ytEnableSchedule) ytEnableSchedule.checked = false;
 }

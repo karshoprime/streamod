@@ -376,6 +376,40 @@ function createTables() {
         }
       });
 
+      // --- Columns used by the AI translation / channel auth / rotation features.
+      // These were previously only present in hand-migrated databases; make sure
+      // a fresh install gets them too.
+      const extraColumns = [
+        ['users', 'ai_provider', 'TEXT'],
+        ['users', 'ai_model', 'TEXT'],
+        ['users', 'ai_api_key', 'TEXT'],
+        ['youtube_channels', 'auth_status', "TEXT DEFAULT 'connected'"],
+        ['youtube_channels', 'auth_error', 'TEXT'],
+        ['youtube_channels', 'source_language', "TEXT DEFAULT 'en'"],
+        ['youtube_channels', 'localizations', 'TEXT'],
+        ['youtube_channels', 'max_title_length', 'INTEGER DEFAULT 100'],
+        ['stream_rotations', 'youtube_stream_id', 'TEXT'],
+        ['stream_rotations', 'youtube_stream_key', 'TEXT'],
+        ['stream_rotations', 'youtube_rtmp_url', 'TEXT'],
+        ['stream_rotations', 'youtube_broadcast_id', 'TEXT'],
+        // --- YouTube Studio-style ad settings (JSON) + per-stream localization settings
+        ['streams', 'youtube_ad_settings', 'TEXT'],
+        ['streams', 'youtube_localizations', 'TEXT'],
+        ['streams', 'youtube_source_language', 'TEXT'],
+        ['rotation_items', 'youtube_ad_settings', 'TEXT'],
+        ['stream_rotations', 'youtube_ad_settings', 'TEXT'],
+        ['stream_rotations', 'youtube_localizations', 'TEXT'],
+        ['stream_rotations', 'youtube_source_language', 'TEXT']
+      ];
+
+      extraColumns.forEach(([table, column, type]) => {
+        db.run(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`, (err) => {
+          if (err && !err.message.includes('duplicate column name')) {
+            console.error(`Error adding ${column} column to ${table}:`, err.message);
+          }
+        });
+      });
+
       db.run(`CREATE TABLE IF NOT EXISTS app_settings (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         setting_key TEXT UNIQUE NOT NULL,

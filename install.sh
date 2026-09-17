@@ -47,8 +47,8 @@ else
 fi
 
 echo "📥 Clone repository..."
-git clone https://github.com/bangtutorial/streamflow
-cd streamflow
+git clone https://github.com/karshoprime/streamod
+cd streamod
 
 echo "⚙️ Installing dependencies..."
 npm install
@@ -71,7 +71,7 @@ else
 fi
 
 echo "▶️ Starting StreamFlow..."
-pm2 start app.js --name streamflow
+pm2 start app.js --name streamod
 pm2 save
 
 echo

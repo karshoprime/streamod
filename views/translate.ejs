@@ -1,46 +1,5 @@
 <% layout('layout') -%>
 
-<%
-const languages = [
-  { code: 'en', name: 'English' },
-  { code: 'id', name: 'Indonesian' },
-  { code: 'ms', name: 'Malay' },
-  { code: 'th', name: 'Thai' },
-  { code: 'vi', name: 'Vietnamese' },
-
-  { code: 'ar', name: 'Arabic' },
-  { code: 'hi', name: 'Hindi' },
-  { code: 'bn', name: 'Bengali' },
-  { code: 'ur', name: 'Urdu' },
-
-  { code: 'fr', name: 'French' },
-  { code: 'de', name: 'German' },
-  { code: 'es', name: 'Spanish' },
-  { code: 'pt', name: 'Portuguese' },
-  { code: 'it', name: 'Italian' },
-  { code: 'nl', name: 'Dutch' },
-  { code: 'da', name: 'Danish' },
-  { code: 'cs', name: 'Czech' },
-  { code: 'ro', name: 'Romanian' },
-
-  { code: 'ru', name: 'Russian' },
-  { code: 'uk', name: 'Ukrainian' },
-  { code: 'pl', name: 'Polish' },
-  { code: 'tr', name: 'Turkish' },
-  { code: 'el', name: 'Greek' },
-  { code: 'hu', name: 'Hungarian' },
-
-  { code: 'zh', name: 'Chinese' },
-  { code: 'ja', name: 'Japanese' },
-  { code: 'ko', name: 'Korean' },
-
-  { code: 'sv', name: 'Swedish' },
-  { code: 'fi', name: 'Finnish' },
-  { code: 'no', name: 'Norwegian' },
-
-  { code: 'mi', name: 'Maori' }
-];
-%>
 
 <div class="space-y-6">
 
@@ -176,23 +135,28 @@ const languages = [
         </div>
       </div>
 
-      <div class="flex gap-3">
-        <button type="button" onclick="selectAllLanguages()" class="text-xs text-blue-400 hover:underline">
-          Select All
-        </button>
-        <button type="button" onclick="clearLanguages()" class="text-xs text-gray-400 hover:underline">
+      <div class="flex flex-wrap gap-2 items-center">
+        <span class="text-xs text-gray-500">Presets:</span>
+        <% presets.forEach(preset => { %>
+          <button type="button" onclick="applyLanguagePreset('<%= preset.key %>')" class="px-2.5 py-1 rounded-md bg-gray-700 hover:bg-gray-600 text-xs text-gray-200"><%= preset.name %></button>
+        <% }) %>
+        <button type="button" onclick="clearLanguages()" class="px-2.5 py-1 rounded-md bg-gray-800 hover:bg-gray-700 text-xs text-gray-400 ml-auto">
           Clear
         </button>
       </div>
 
+      <input type="text" id="languageSearch" placeholder="Search languages…" oninput="filterLanguages()"
+        class="w-full px-4 py-2 rounded-lg bg-dark-900 border border-gray-700 text-white text-sm focus:outline-none focus:ring-1 focus:ring-primary">
+
       <div id="languageCheckboxes" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
         <% languages.forEach(lang => { %>
-          <label class="flex items-center gap-2 px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-xs text-gray-200 cursor-pointer transition-colors">
-            <input type="checkbox" value="<%= lang.code %>" class="accent-blue-500">
-            <span><%= lang.name %> (<%= lang.code %>)</span>
+          <label class="lang-item flex items-center gap-2 px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-xs text-gray-200 cursor-pointer transition-colors" data-lang-name="<%= lang.name.toLowerCase() %> <%= lang.code.toLowerCase() %>">
+            <input type="checkbox" value="<%= lang.code %>" class="accent-blue-500" onchange="updateSelectedCount()">
+            <span class="truncate"><%= lang.name %> (<%= lang.code %>)</span>
           </label>
         <% }) %>
       </div>
+      <div id="languageSelectedCount" class="text-xs text-gray-500">0 selected</div>
     </div>
 
     <div class="flex flex-col sm:flex-row gap-3 justify-end px-5 py-4 border-t border-gray-700">
@@ -235,12 +199,36 @@ function getSelectedLanguages() {
   return Array.from(checkboxes).map(cb => cb.value);
 }
 
+const LANGUAGE_PRESETS = <%- JSON.stringify(presets) %>;
+
+function applyLanguagePreset(key) {
+  const preset = LANGUAGE_PRESETS.find(p => p.key === key);
+  if (!preset) return;
+  const codes = new Set(preset.codes);
+  document.querySelectorAll('#languageCheckboxes input').forEach(cb => cb.checked = codes.has(cb.value));
+  updateSelectedCount();
+}
+
 function selectAllLanguages() {
   document.querySelectorAll('#languageCheckboxes input').forEach(cb => cb.checked = true);
+  updateSelectedCount();
 }
 
 function clearLanguages() {
   document.querySelectorAll('#languageCheckboxes input').forEach(cb => cb.checked = false);
+  updateSelectedCount();
+}
+
+function updateSelectedCount() {
+  const el = document.getElementById('languageSelectedCount');
+  if (el) el.textContent = `${getSelectedLanguages().length} selected`;
+}
+
+function filterLanguages() {
+  const term = (document.getElementById('languageSearch').value || '').trim().toLowerCase();
+  document.querySelectorAll('#languageCheckboxes .lang-item').forEach(item => {
+    item.classList.toggle('hidden', term && !item.dataset.langName.includes(term));
+  });
 }
 
 function openLanguageModal() {
@@ -259,7 +247,9 @@ function updateLanguageSummary(localizations = []) {
     return;
   }
 
-  summary.textContent = `Channel languages: ${localizations.join(', ')}`;
+  summary.textContent = localizations.length > 12
+    ? `Channel languages: ${localizations.length} selected (${localizations.slice(0, 12).join(', ')}, …)`
+    : `Channel languages: ${localizations.join(', ')}`;
 }
 
 async function loadChannelLanguageSettings() {
@@ -278,6 +268,7 @@ async function loadChannelLanguageSettings() {
     document.querySelectorAll('#languageCheckboxes input').forEach(cb => {
       cb.checked = (result.localizations || []).includes(cb.value);
     });
+    updateSelectedCount();
 
     updateLanguageSummary(result.localizations || []);
   } catch (err) {

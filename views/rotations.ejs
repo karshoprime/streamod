@@ -115,6 +115,11 @@
         <% } else if (rotation.status === 'active') { %>
         <button onclick="stopRotation('<%= rotation.id %>')" class="px-2.5 py-1 text-white text-[10px] font-medium rounded transition-colors bg-red-500 hover:bg-red-600">Stop</button>
         <% } %>
+        <% if (rotation.status === 'active') { %>
+        <button class="p-1 hover:bg-dark-700 rounded transition-colors" title="Live monetization" onclick="openRotationMonetization('<%= rotation.id %>', '<%= (rotation.name || '').replace(/'/g, '') %>')">
+          <i class="ti ti-coin text-yellow-400 text-sm"></i>
+        </button>
+        <% } %>
         <button class="p-1 hover:bg-dark-700 rounded transition-colors" onclick="editRotation('<%= rotation.id %>')">
           <i class="ti ti-edit text-gray-400 hover:text-white text-sm"></i>
         </button>
@@ -259,6 +264,11 @@
               </button>
               <% } %>
               <div class="ml-2 flex items-center gap-1">
+                <% if (rotation.status === 'active') { %>
+                <button onclick="openRotationMonetization('<%= rotation.id %>', '<%= (rotation.name || '').replace(/'/g, '') %>')" class="p-1.5 hover:bg-dark-700 rounded transition-colors" title="Live monetization">
+                  <i class="ti ti-coin text-yellow-400"></i>
+                </button>
+                <% } %>
                 <button onclick="editRotation('<%= rotation.id %>')" class="p-1.5 hover:bg-dark-700 rounded transition-colors">
                   <i class="ti ti-edit text-gray-400 hover:text-white"></i>
                 </button>
@@ -383,15 +393,15 @@
               </div>
               <div>
                 <label class="text-sm font-medium text-white block mb-2">Monetization</label>
-                <div class="h-[42px] px-4 bg-dark-700 border border-gray-600 rounded-lg flex items-center justify-between">
-                  <span class="text-sm text-gray-300">Enable monetization</span>
-                  <label class="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" id="globalMonetization" name="globalMonetization" class="sr-only peer">
-                    <div class="w-11 h-6 bg-dark-900 rounded-full peer peer-checked:bg-primary"></div>
-                    <div class="absolute left-[2px] top-[2px] w-5 h-5 bg-white rounded-full transition-all peer-checked:translate-x-5"></div>
-                  </label>
+                <div class="h-[42px] px-4 bg-dark-700 border border-gray-600 rounded-lg flex items-center">
+                  <span id="rotationAdSummary" class="text-sm text-gray-300 truncate">Ads off</span>
                 </div>
               </div>
+            </div>
+            <div class="space-y-4 mb-6">
+              <div id="rotationAdPanelContainer"></div>
+              <div id="rotationLangPanelContainer"></div>
+              <p class="text-xs text-gray-500">These monetization and translation settings apply to every stream in this rotation. While a rotation is live, use the <i class="ti ti-coin text-yellow-400"></i> button on the rotation card to change ads or run an ad break instantly.</p>
             </div>
           </div>
 
@@ -555,7 +565,7 @@ function openCreateRotationModal() {
   document.getElementById('rotationForm').reset();
   document.getElementById('rotationId').value = '';
   document.getElementById('rotationDurationBadge').textContent = 'Duration: 00:00';
-  document.getElementById('globalMonetization').checked = false;
+  renderRotationPanels(null, [], 'en');
   
   document.getElementById('repeatMode').value = 'daily';
   
@@ -930,7 +940,6 @@ function selectRotationChannel(channelId, channelName, channelThumbnail) {
   document.getElementById('rotationChannelId').value = channelId;
   document.getElementById('rotationChannelThumb').src = channelThumbnail;
   document.getElementById('rotationChannelName').textContent = channelName;
-  loadChannelLocalizationSettings(channelId);
   toggleRotationChannelDropdown();
 }
 
@@ -942,7 +951,10 @@ async function saveRotation() {
   const endTime = document.getElementById('rotationEndTime').value;
   const globalPrivacy = document.getElementById('globalPrivacy').value;
   const globalCategory = document.getElementById('globalCategory').value;
-  const globalMonetization = document.getElementById('globalMonetization').checked;
+  const rotationAdSettings = window.StreamodAds ? StreamodAds.read('rot') : { enabled: false };
+  const globalMonetization = rotationAdSettings.enabled;
+  const rotationLanguages = window.StreamodLang ? StreamodLang.read('rot') : [];
+  const rotationSourceLanguage = window.StreamodLang ? StreamodLang.readSource('rot') : 'en';
   
   if (!name) {
     showToast('error', 'Please enter rotation name');
@@ -1035,16 +1047,6 @@ async function saveRotation() {
   }
   
   const youtubeChannelId = document.getElementById('rotationChannelId').value;
-
-  const selectedLocalizations = Array.from(
-    document.querySelectorAll('input[name="localizations"]:checked')
-  ).map(cb => cb.value);
-
-  const sourceLanguageEl = document.querySelector('select[name="source_language"]');
-  const maxTitleLengthEl = document.querySelector('input[name="max_title_length"]');
-
-  const sourceLanguage = sourceLanguageEl ? sourceLanguageEl.value : 'en';
-  const maxTitleLength = maxTitleLengthEl ? maxTitleLengthEl.value : 100;
   
   formData.append('name', name);
   formData.append('repeat_mode', repeatMode);
@@ -1052,9 +1054,9 @@ async function saveRotation() {
   formData.append('end_time', endDateTimeStr);
   formData.append('youtube_channel_id', youtubeChannelId);
   formData.append('items', JSON.stringify(items));
-  formData.append('channel_localizations', JSON.stringify(selectedLocalizations));
-  formData.append('channel_source_language', sourceLanguage);
-  formData.append('channel_max_title_length', maxTitleLength); 
+  formData.append('youtube_ad_settings', JSON.stringify(rotationAdSettings));
+  formData.append('youtube_localizations', JSON.stringify(rotationLanguages));
+  formData.append('youtube_source_language', rotationSourceLanguage);
 
   try {
     const url = rotationId ? `/api/rotations/${rotationId}` : '/api/rotations';
@@ -1097,31 +1099,43 @@ async function saveRotation() {
   }
 }
 
-async function loadChannelLocalizationSettings(channelId) {
-  if (!channelId) return;
-
-  try {
-    const response = await fetch(`/api/youtube-channels/${channelId}/localization-settings`);
-    const result = await response.json();
-
-    if (!result.success) return;
-
-    const sourceSelect = document.querySelector('select[name="source_language"]');
-    const maxLengthInput = document.querySelector('input[name="max_title_length"]');
-
-    if (sourceSelect) {
-      sourceSelect.value = result.source_language || 'en';
+function renderRotationPanels(adSettings, languages, sourceLanguage) {
+  if (window.StreamodAds) {
+    StreamodAds.render('rotationAdPanelContainer', 'rot', adSettings);
+    const summary = document.getElementById('rotationAdSummary');
+    if (summary) summary.textContent = StreamodAds.describe(adSettings);
+    const container = document.getElementById('rotationAdPanelContainer');
+    if (container && !container.dataset.bound) {
+      container.dataset.bound = '1';
+      container.addEventListener('adsettingschange', (e) => {
+        const el = document.getElementById('rotationAdSummary');
+        if (el) el.textContent = StreamodAds.describe(e.detail);
+      });
     }
-
-    if (maxLengthInput) {
-      maxLengthInput.value = result.max_title_length || 100;
-    }
-
-    document.querySelectorAll('input[name="localizations"]').forEach(cb => {
-      cb.checked = (result.localizations || []).includes(cb.value);
+  }
+  if (window.StreamodLang) {
+    StreamodLang.render('rotationLangPanelContainer', 'rot', {
+      selected: languages || [],
+      sourceLanguage: sourceLanguage || 'en',
+      title: 'Translate title & description (all items)'
     });
+  }
+}
+
+async function openRotationMonetization(rotationId, name) {
+  try {
+    const response = await fetch(`/api/rotations/${rotationId}/active-stream`);
+    const result = await response.json();
+    if (!result.success) throw new Error(result.error || 'Failed');
+    if (!result.stream) {
+      showToast('warning', 'This rotation has no running broadcast right now. Edit the rotation to change its ad settings.');
+      return;
+    }
+    if (window.StreamodLiveMonetization) {
+      StreamodLiveMonetization.open(result.stream.id, { title: `${name} · ${result.stream.title}` });
+    }
   } catch (err) {
-    console.error('Failed loading channel localization settings:', err);
+    showToast('error', err.message);
   }
 }
 
@@ -1152,14 +1166,16 @@ async function editRotation(id) {
       if (rotation.items && rotation.items.length > 0) {
         document.getElementById('globalPrivacy').value = rotation.items[0].privacy || 'unlisted';
         document.getElementById('globalCategory').value = rotation.items[0].category || '22';
-        document.getElementById('globalMonetization').checked = rotation.items[0].youtube_monetization === true || rotation.items[0].youtube_monetization === 1;
-      } else {
-        document.getElementById('globalMonetization').checked = false;
+      }
+      {
+        const legacyOn = rotation.items && rotation.items[0] && (rotation.items[0].youtube_monetization === true || rotation.items[0].youtube_monetization === 1);
+        let langs = [];
+        try { langs = JSON.parse(rotation.youtube_localizations || '[]'); } catch (e) { langs = []; }
+        renderRotationPanels(rotation.youtube_ad_settings || (rotation.items && rotation.items[0] && rotation.items[0].youtube_ad_settings) || { enabled: !!legacyOn }, langs, rotation.youtube_source_language || 'en');
       }
       
       if (rotation.youtube_channel_id) {
         document.getElementById('rotationChannelId').value = rotation.youtube_channel_id;
-loadChannelLocalizationSettings(rotation.youtube_channel_id);
         if (rotation.youtube_channel_name) {
           document.getElementById('rotationChannelName').textContent = rotation.youtube_channel_name;
         }

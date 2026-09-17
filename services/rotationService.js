@@ -6,10 +6,20 @@ const { google } = require('googleapis');
 const { decrypt } = require('../utils/encryption');
 const path = require('path');
 const fs = require('fs');
-const { buildLocalizedMetadata } = require('./translationService');
-const { syncBroadcastMonetization } = require('./youtubeService');
-// 🔥 Toggle auto localization from rotation (GLOBAL SWITCH)
-const ENABLE_ROTATION_LOCALIZATION = false;
+const { syncBroadcastMonetization, applyBroadcastLocalizations } = require('./youtubeService');
+const { normalizeAdSettings } = require('./adSettings');
+const { sanitizeLanguageList } = require('../config/youtubeLanguages');
+
+function parseJsonArray(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    return [];
+  }
+}
 
 function isInvalidGrantError(error) {
   return (
@@ -388,63 +398,22 @@ try {
   console.error('[YouTube] Failed to mark channel connected:', markOkErr.message);
 }
 
-let localizations = {};
-let sourceLanguage = selectedChannel.source_language || 'en';
-
-if (ENABLE_ROTATION_LOCALIZATION) {
-  try {
-    const targetLanguages = selectedChannel.localizations
-      ? JSON.parse(selectedChannel.localizations)
-      : [];
-    const maxTitleLength = selectedChannel.max_title_length || 100;
-
-    console.log('[AI] Source language:', sourceLanguage);
-    console.log('[AI] Targets:', targetLanguages);
-    console.log('[AI] Max title length:', maxTitleLength);
-
-    for (const lang of targetLanguages) {
-      try {
-        console.log(`[AI] Translating to ${lang}...`);
-
-        await new Promise(resolve => setTimeout(resolve, 3000));
-
-        const result = await buildLocalizedMetadata({
-          title: item.title,
-          description: item.description || '',
-          sourceLanguage,
-          targetLanguages: [lang],
-          maxTitleLength,
-          user
-        });
-
-        if (result && result[lang]) {
-          localizations[lang] = result[lang];
-          console.log(`[AI] Success: ${lang}`);
-        } else {
-          console.log(`[AI] Empty result for ${lang}`);
-        }
-      } catch (langError) {
-        console.error(`[AI] Failed for ${lang}:`, langError.message);
-      }
+    // Per-rotation translation settings (fall back to the channel defaults from the Translate page)
+    const sourceLanguage = rotation.youtube_source_language || selectedChannel.source_language || 'en';
+    let targetLanguages = sanitizeLanguageList(parseJsonArray(rotation.youtube_localizations));
+    if (!targetLanguages.length) {
+      targetLanguages = sanitizeLanguageList(parseJsonArray(selectedChannel.localizations));
     }
 
-    if (!Object.keys(localizations).length) {
-      console.log('[AI] Skip localization (empty result)');
-    } else {
-      console.log('[AI] Localization count:', Object.keys(localizations).length);
-    }
-
-  } catch (locError) {
-    console.error('[AI] Error building localizations:', locError.message);
-  }
-} else {
-  console.log('[Rotation] Auto localization disabled');
-}
-
-    let monetizationEnabled = item.youtube_monetization === true || item.youtube_monetization === 1;
+    // Per-rotation ad settings (stored on every item, rotation row is the source of truth)
+    const adSettings = normalizeAdSettings(
+      rotation.youtube_ad_settings || item.youtube_ad_settings,
+      item.youtube_monetization
+    );
+    let monetizationEnabled = adSettings.enabled;
     if (monetizationEnabled) {
       try {
-        await syncBroadcastMonetization(youtube, broadcast.id, true);
+        await syncBroadcastMonetization(youtube, broadcast.id, adSettings);
       } catch (monetizationError) {
         monetizationEnabled = false;
         console.warn(`[RotationService] Failed to enable monetization for broadcast ${broadcast.id}. Continuing without monetization. Error: ${monetizationError.message}`);
@@ -507,25 +476,6 @@ if (ENABLE_ROTATION_LOCALIZATION) {
       streamId: liveStream.id
     });
 
-// ✅ APPLY LOCALIZATIONS (POSISI PALING BENAR)
-if (ENABLE_ROTATION_LOCALIZATION && Object.keys(localizations).length > 0) {
-  try {
-    await youtube.videos.update({
-      part: ['localizations'],
-      requestBody: {
-        id: broadcast.id,
-        localizations: localizations
-      }
-    });
-
-    console.log(`[RotationService] Applied localizations to broadcast ${broadcast.id}`);
-  } catch (err) {
-    console.error('[RotationService] Error applying localizations:', err.message);
-  }
-} else if (ENABLE_ROTATION_LOCALIZATION) {
-  console.log('[AI] No localizations to apply');
-}
-
     const thumbnailToUpload = item.original_thumbnail_path || item.thumbnail_path;
     if (thumbnailToUpload) {
       try {
@@ -564,17 +514,16 @@ if (ENABLE_ROTATION_LOCALIZATION && Object.keys(localizations).length > 0) {
         console.error('[RotationService] Error updating video metadata:', updateError.message);
       }
 
-      if (Object.keys(localizations).length > 0) {
+      if (targetLanguages.length > 0) {
         try {
-          await youtube.videos.update({
-            part: ['localizations'],
-            requestBody: {
-              id: broadcast.id,
-              localizations: localizations
-            }
+          await applyBroadcastLocalizations(youtube, broadcast.id, {
+            user,
+            title: item.title,
+            description: item.description || '',
+            sourceLanguage,
+            targetLanguages,
+            maxTitleLength: selectedChannel.max_title_length || 100
           });
-
-          console.log(`[RotationService] Applied localizations to broadcast ${broadcast.id}`);
         } catch (locUpdateError) {
           console.error('[RotationService] Error applying localizations:', locUpdateError.message);
         }
@@ -603,6 +552,9 @@ if (ENABLE_ROTATION_LOCALIZATION && Object.keys(localizations).length > 0) {
       youtube_category: item.category,
       youtube_tags: item.tags,
       youtube_monetization: monetizationEnabled,
+      youtube_ad_settings: JSON.stringify({ ...adSettings, enabled: monetizationEnabled }),
+      youtube_localizations: JSON.stringify(targetLanguages),
+      youtube_source_language: sourceLanguage,
       youtube_channel_id: selectedChannel.id,
       is_youtube_api: true,
       schedule_time: rotation.start_time,
@@ -771,7 +723,8 @@ async function applyPendingRotationChanges(rotationId) {
         original_thumbnail_path: item.original_thumbnail_path || null,
         privacy: item.privacy || 'unlisted',
         category: item.category || '22',
-        youtube_monetization: item.youtube_monetization === true || item.youtube_monetization === 'true'
+        youtube_monetization: item.youtube_monetization === true || item.youtube_monetization === 'true',
+        youtube_ad_settings: item.youtube_ad_settings || null
       });
     }
 

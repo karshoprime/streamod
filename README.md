@@ -203,6 +203,34 @@ http://IP_SERVER:PORT
 Contoh: `http://88.12.34.56:7575`
 
 
+## 💰 Monetisasi Live (gaya YouTube Studio)
+
+Panel **Monetization** tersedia di form Create/Edit stream (mode YouTube), di form Rotation (berlaku untuk semua item), dan lewat tombol <i>koin</i> pada kartu stream/rotation yang sedang live (**Live monetization**). Kontrolnya sama dengan Live Control Room YouTube Studio:
+
+| Kontrol | Keterangan |
+|---|---|
+| **Ads** on/off | Mengaktifkan iklan pada broadcast (`adsMonetizationStatus`) |
+| **Auto ad breaks** | YouTube menyisipkan mid-roll otomatis |
+| **Frequency** Low / Medium / High | Frekuensi yang dioptimalkan YouTube |
+| **Custom** interval 6–30 menit | Jeda iklan tetap, serentak untuk semua penonton atau bergantian |
+| **Delay ads at start** | Tunda iklan N menit setelah live mulai |
+| **Run ad break** (30–180 detik) | Sisipkan mid-roll manual saat live berjalan |
+
+Status kelayakan (eligible) dan status iklan yang sebenarnya dibaca langsung dari YouTube di panel Live monetization. Perubahan saat live langsung dikirim ke YouTube; untuk stream yang belum mulai, pengaturan disimpan dan diterapkan saat broadcast dibuat.
+
+> Catatan: fitur ini memakai `liveBroadcasts.monetizationDetails` dan `liveBroadcasts.insertCuepoint` dari YouTube Data API v3. Channel harus sudah masuk YouTube Partner Program; kalau tidak, YouTube menolak permintaan dan stream tetap jalan tanpa iklan.
+
+## 🌐 Terjemahan Judul & Deskripsi (Localizations)
+
+Pilih bahasa (satu per satu, preset, atau semua ~80 bahasa YouTube) di form stream / rotation, atau lewat panel Live monetization → **Translate now**. Judul dan deskripsi diterjemahkan lalu dikirim ke YouTube sebagai *localizations*, sehingga penonton melihat judul sesuai bahasa mereka.
+
+Provider diatur di **Settings → Integration → Translation Settings**:
+
+- **Google Cloud Translation API** (disarankan): enable *Cloud Translation API* di Google Cloud Console → buat API key → tempel di Settings → klik **Test**.
+- OpenAI / Gemini (opsional): tetap didukung.
+
+Halaman **Translate** dipakai untuk menerjemahkan video/live yang sudah ada di channel secara massal.
+
 ## 🔐 Reset Password
 
 Jika lupa password atau perlu reset akun:
