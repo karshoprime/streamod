@@ -34,6 +34,20 @@ const languages = require('./config/languages');
 const aiProviders = require('./config/aiProviders');
 
 /**
+ * Shows a saved secret as "****" + last 4 characters so the UI can tell
+ * "already saved" apart from "empty" without exposing the value.
+ */
+function maskSecret(value) {
+  if (!value) return '';
+  const str = String(value);
+  return '****' + (str.length > 4 ? str.slice(-4) : '');
+}
+
+function isMaskedSecret(value) {
+  return typeof value === 'string' && value.trim().startsWith('****');
+}
+
+/**
  * Accepts a JSON array string, an array, or a comma separated list of language codes.
  */
 function parseLanguageInput(value) {
@@ -982,7 +996,7 @@ app.get('/settings', isAuthenticated, async (req, res) => {
       user: user,
       appVersion: packageJson.version,
       youtubeClientId: user.youtube_client_id || '',
-      youtubeClientSecret: user.youtube_client_secret ? '••••••••••••••••' : '',
+      youtubeClientSecret: maskSecret(user.youtube_client_secret ? decrypt(user.youtube_client_secret) : ''),
       youtubeConnected: isYoutubeConnected,
       youtubeChannels: youtubeChannels,
       youtubeChannelName: defaultChannel?.channel_name || '',
@@ -990,7 +1004,7 @@ app.get('/settings', isAuthenticated, async (req, res) => {
       youtubeSubscriberCount: defaultChannel?.subscriber_count || '0',
       hasYoutubeCredentials: hasYoutubeCredentials,
       recaptchaSiteKey: recaptchaSettings.siteKey || '',
-      recaptchaSecretKey: recaptchaSettings.secretKey ? '••••••••••••••••' : '',
+      recaptchaSecretKey: maskSecret(recaptchaSettings.secretKey),
       hasRecaptchaKeys: recaptchaSettings.hasKeys,
       recaptchaEnabled: recaptchaSettings.enabled,
       success: req.query.success || null,
@@ -1663,6 +1677,7 @@ app.get('/api/ai-settings', isAuthenticated, async (req, res) => {
       ai_provider: user.ai_provider || 'google',
       ai_model: user.ai_model || '',
       ai_api_key_saved: !!user.ai_api_key,
+      ai_api_key_masked: maskSecret(user.ai_api_key),
       providers: aiProviders
     });
   } catch (error) {
@@ -1683,7 +1698,7 @@ app.post('/api/ai-settings', isAuthenticated, async (req, res) => {
     await User.update(req.session.userId, {
       ai_provider: provider,
       ai_model: model,
-      ...(ai_api_key ? { ai_api_key: String(ai_api_key).trim() } : {})
+      ...(ai_api_key && !isMaskedSecret(ai_api_key) ? { ai_api_key: String(ai_api_key).trim() } : {})
     });
 
     res.json({ success: true, message: 'Translation settings saved' });
@@ -2378,11 +2393,21 @@ app.post('/api/settings/youtube-credentials', isAuthenticated, [
     }
 
     const { clientId, clientSecret } = req.body;
+
+    // "****abcd" means the user left the saved secret untouched → only update the Client ID.
+    if (isMaskedSecret(clientSecret)) {
+      const current = await User.findById(req.session.userId);
+      if (!current || !current.youtube_client_secret) {
+        return res.status(400).json({ success: false, error: 'Client Secret is required' });
+      }
+      await User.update(req.session.userId, { youtube_client_id: clientId.trim() });
+      return res.json({ success: true, message: 'Client ID updated (secret unchanged)' });
+    }
     
-    const encryptedSecret = encrypt(clientSecret);
+    const encryptedSecret = encrypt(clientSecret.trim());
     
     await User.update(req.session.userId, {
-      youtube_client_id: clientId,
+      youtube_client_id: clientId.trim(),
       youtube_client_secret: encryptedSecret
     });
 

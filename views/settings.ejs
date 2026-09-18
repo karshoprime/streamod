@@ -206,7 +206,7 @@
                 <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400">
                   <i class="ti ti-shield-lock"></i>
                 </span>
-                <input type="password" id="recaptcha-secret-key" name="recaptchaSecretKey"
+                <input type="<%= (typeof recaptchaSecretKey !== 'undefined' && recaptchaSecretKey) ? 'text' : 'password' %>" id="recaptcha-secret-key" name="recaptchaSecretKey"
                   class="bg-dark-900 text-white pl-10 pr-10 py-2 rounded-lg block w-full focus:outline-none focus:ring-1 focus:ring-primary border border-gray-700"
                   placeholder="Enter your reCAPTCHA Secret Key"
                   value="<%= typeof recaptchaSecretKey !== 'undefined' ? recaptchaSecretKey : '' %>">
@@ -308,13 +308,13 @@
                     <i class="ti ti-lock mr-1"></i>Client Secret
                   </label>
                   <div class="relative">
-                    <input type="password" id="youtube-client-secret" name="youtubeClientSecret"
-                      class="bg-dark-900 text-white px-4 py-2 rounded-lg block w-full focus:outline-none focus:ring-1 focus:ring-primary border border-gray-700"
+                    <input type="<%= (typeof youtubeClientSecret !== 'undefined' && youtubeClientSecret) ? 'text' : 'password' %>" id="youtube-client-secret" name="youtubeClientSecret"
+                      class="secret-field bg-dark-900 text-white px-4 py-2 rounded-lg block w-full focus:outline-none focus:ring-1 focus:ring-primary border border-gray-700"
                       placeholder="Enter your Google Client Secret"
                       value="<%= typeof youtubeClientSecret !== 'undefined' ? youtubeClientSecret : '' %>">
                   </div>
                   <% if (typeof hasYoutubeCredentials !== 'undefined' && hasYoutubeCredentials) { %>
-                  <p class="text-xs text-gray-500">Enter a new value to update</p>
+                  <p class="text-xs text-gray-500"><span class="text-green-400"><i class="ti ti-check"></i> Saved</span> — shown as **** + last 4 characters. Click the field and type a new value to replace it.</p>
                   <% } %>
                 </div>
               </div>
@@ -786,7 +786,7 @@
             return false;
           }
           
-          const isMaskedSecret = secretKey === '••••••••••••••••';
+          const isMaskedSecret = secretKey.startsWith('****');
           
           if (!hasExistingRecaptchaKeys && (!secretKey || isMaskedSecret)) {
             showToast('error', 'Please enter reCAPTCHA Secret Key.');
@@ -1073,14 +1073,9 @@
             return;
           }
           
-          const isMaskedSecret = clientSecret === '••••••••••••••••';
+          const isMaskedSecret = clientSecret.startsWith('****');
           if (!clientSecret || (isMaskedSecret && !originalClientSecret)) {
             showToast('error', 'Please enter Client Secret');
-            return;
-          }
-          
-          if (isMaskedSecret) {
-            showToast('error', 'Please enter a new Client Secret to update credentials');
             return;
           }
           
@@ -1098,7 +1093,8 @@
             
             if (data.success) {
               showToast('success', 'YouTube API credentials saved successfully');
-              youtubeClientSecretInput.value = '••••••••••••••••';
+              youtubeClientSecretInput.value = isMaskedSecret ? clientSecret : ('****' + clientSecret.slice(-4));
+              youtubeClientSecretInput.type = 'text';
               if (connectYoutubeBtn) {
                 connectYoutubeBtn.disabled = false;
               }
@@ -1264,9 +1260,9 @@ const apiKeyInput = document.getElementById('aiApiKey');
 const helpEl = document.getElementById('aiApiKeyHelp');
 
 if (result.ai_api_key_saved) {
-  statusEl.textContent = 'API Key saved';
-  if (apiKeyInput) apiKeyInput.value = '••••••••••••••••';
-  if (helpEl) helpEl.textContent = 'Enter a new value to update';
+  statusEl.innerHTML = '<span class="text-green-400"><i class="ti ti-check"></i> API Key saved</span>';
+  if (apiKeyInput) { apiKeyInput.value = result.ai_api_key_masked || '****'; apiKeyInput.type = 'text'; }
+  if (helpEl) helpEl.textContent = 'Shown as **** + last 4 characters. Type a new value to replace it.';
 } else {
   statusEl.textContent = 'No API Key saved';
   if (apiKeyInput) apiKeyInput.value = '';
@@ -1310,7 +1306,7 @@ async function saveAiSettings() {
     const provider = document.getElementById('aiProvider').value;
     const model = document.getElementById('aiModel').value;
     const apiKeyRaw = document.getElementById('aiApiKey').value;
-    const apiKey = apiKeyRaw === '••••••••••••••••' ? '' : apiKeyRaw;
+    const apiKey = apiKeyRaw.trim().startsWith('****') ? '' : apiKeyRaw.trim();
     const statusEl = document.getElementById('aiApiKeyStatus');
 
     const response = await fetch('/api/ai-settings', {
@@ -1332,12 +1328,9 @@ async function saveAiSettings() {
       return;
     }
 
-    statusEl.textContent = 'API Key saved';
-    document.getElementById('aiApiKey').value = '••••••••••••••••';
-
-    const helpEl = document.getElementById('aiApiKeyHelp');
-    if (helpEl) helpEl.textContent = 'Enter a new value to update';
-    document.getElementById('aiApiKey').value = '';
+    statusEl.innerHTML = '<span class="text-green-400"><i class="ti ti-check"></i> API Key saved</span>';
+    statusEl.className = 'mb-4 text-sm text-gray-300';
+    await loadAiSettings();
   } catch (err) {
     console.error('Failed saving AI settings:', err);
   }
@@ -1360,6 +1353,17 @@ async function testAiSettings() {
     btn.disabled = false;
   }
 }
+
+// Masked secret fields ("****abcd"): first keystroke clears the mask and hides the input again.
+document.addEventListener('keydown', (e) => {
+  const el = e.target;
+  if (!el || el.tagName !== 'INPUT') return;
+  if (!['aiApiKey', 'youtube-client-secret', 'recaptcha-secret-key'].includes(el.id)) return;
+  if (el.value.startsWith('****') && e.key.length === 1) {
+    el.value = '';
+    el.type = 'password';
+  }
+});
 
 document.addEventListener('DOMContentLoaded', () => {
   loadAiSettings();
