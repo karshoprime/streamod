@@ -362,6 +362,52 @@
                   </div>
                 </div>
 
+                <% if (user && user.user_role === 'admin') { %>
+                <div class="bg-dark-900 rounded-lg p-4 border border-gray-700 mt-6" id="notificationCard">
+                  <div class="flex items-center justify-between mb-1">
+                    <h4 class="text-lg font-semibold"><i class="ti ti-bell mr-1 text-yellow-400"></i>Alert Notifications</h4>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                      <input type="checkbox" id="notifyEnabled" class="sr-only peer">
+                      <div class="w-11 h-6 bg-gray-800 border border-gray-600 rounded-full peer peer-checked:bg-primary peer-checked:border-primary"></div>
+                      <div class="absolute left-[2px] top-[2px] w-5 h-5 bg-white rounded-full transition-all peer-checked:translate-x-5"></div>
+                    </label>
+                  </div>
+                  <p class="text-gray-400 text-sm mb-4">Get a Telegram message (or webhook call) when a stream dies, a channel token expires, YouTube rejects ads, or the disk is almost full.</p>
+
+                  <label class="block text-sm font-medium text-gray-300 mb-2">Telegram bot token</label>
+                  <input id="notifyTelegramToken" type="password" placeholder="123456789:AAH…  (from @BotFather)"
+                    class="w-full mb-1 px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-white">
+                  <p class="text-xs text-gray-500 mb-3">Create a bot with @BotFather, then send it any message so it can reach you.</p>
+
+                  <label class="block text-sm font-medium text-gray-300 mb-2">Telegram chat ID</label>
+                  <input id="notifyTelegramChatId" type="text" placeholder="e.g. 123456789 or -1001234567890 for a group"
+                    class="w-full mb-1 px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-white">
+                  <p class="text-xs text-gray-500 mb-3">Get it from @userinfobot (personal) or @getidsbot (groups/channels).</p>
+
+                  <label class="block text-sm font-medium text-gray-300 mb-2">Webhook URL <span class="text-gray-500 font-normal">(optional)</span></label>
+                  <input id="notifyWebhookUrl" type="url" placeholder="https://…  (n8n, Discord, WhatsApp gateway, etc.)"
+                    class="w-full mb-3 px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-white">
+
+                  <label class="block text-sm font-medium text-gray-300 mb-2">Disk warning threshold</label>
+                  <div class="flex items-center gap-2 mb-4">
+                    <input id="notifyDiskThreshold" type="number" min="50" max="99" value="90"
+                      class="w-24 px-3 py-2 rounded-lg bg-gray-800 border border-gray-700 text-white">
+                    <span class="text-sm text-gray-400">% used</span>
+                  </div>
+
+                  <label class="block text-sm font-medium text-gray-300 mb-2">Events</label>
+                  <div id="notifyEvents" class="grid grid-cols-1 sm:grid-cols-2 gap-1.5 mb-4"></div>
+
+                  <div class="flex flex-col sm:flex-row gap-2">
+                    <button type="button" onclick="saveNotificationSettings()"
+                      class="px-4 py-2 rounded-lg bg-primary hover:bg-blue-600 text-white transition-colors">Save</button>
+                    <button type="button" id="notifyTestBtn" onclick="testNotificationSettings()"
+                      class="px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-white transition-colors">Send test</button>
+                  </div>
+                  <div id="notifyStatus" class="mt-3 text-sm text-gray-300"></div>
+                </div>
+                <% } %>
+
 
           <div class="lg:pl-8">
             <div class="space-y-4">
@@ -1358,15 +1404,97 @@ async function testAiSettings() {
 document.addEventListener('keydown', (e) => {
   const el = e.target;
   if (!el || el.tagName !== 'INPUT') return;
-  if (!['aiApiKey', 'youtube-client-secret', 'recaptcha-secret-key'].includes(el.id)) return;
+  if (!['aiApiKey', 'youtube-client-secret', 'recaptcha-secret-key', 'notifyTelegramToken'].includes(el.id)) return;
   if (el.value.startsWith('****') && e.key.length === 1) {
     el.value = '';
     el.type = 'password';
   }
 });
 
+/* ---------------- Alert notifications ---------------- */
+const SEVERITY_DOT = { critical: 'bg-red-500', warning: 'bg-orange-400', info: 'bg-green-500' };
+
+async function loadNotificationSettings() {
+  const card = document.getElementById('notificationCard');
+  if (!card) return;
+  try {
+    const res = await fetch('/api/notification-settings');
+    const result = await res.json();
+    if (!result.success) return;
+    const st = result.settings;
+    document.getElementById('notifyEnabled').checked = !!st.enabled;
+    const tokenEl = document.getElementById('notifyTelegramToken');
+    if (st.telegramTokenMasked) { tokenEl.value = st.telegramTokenMasked; tokenEl.type = 'text'; }
+    document.getElementById('notifyTelegramChatId').value = st.telegramChatId || '';
+    document.getElementById('notifyWebhookUrl').value = st.webhookUrl || '';
+    document.getElementById('notifyDiskThreshold').value = st.diskThreshold || 90;
+    const grid = document.getElementById('notifyEvents');
+    grid.innerHTML = result.availableEvents.map(ev => `
+      <label class="flex items-center gap-2 px-2 py-1.5 rounded-md bg-gray-800 hover:bg-gray-700 text-xs text-gray-200 cursor-pointer">
+        <input type="checkbox" class="notify-event accent-blue-500" value="${ev.key}" ${st.events.includes(ev.key) ? 'checked' : ''}>
+        <span class="w-2 h-2 rounded-full ${SEVERITY_DOT[ev.severity] || 'bg-gray-500'} flex-shrink-0"></span>
+        <span>${ev.label}</span>
+      </label>`).join('');
+  } catch (err) {
+    console.error('Failed loading notification settings:', err);
+  }
+}
+
+function readNotificationForm() {
+  return {
+    enabled: document.getElementById('notifyEnabled').checked,
+    telegramToken: document.getElementById('notifyTelegramToken').value.trim(),
+    telegramChatId: document.getElementById('notifyTelegramChatId').value.trim(),
+    webhookUrl: document.getElementById('notifyWebhookUrl').value.trim(),
+    diskThreshold: document.getElementById('notifyDiskThreshold').value,
+    events: Array.from(document.querySelectorAll('.notify-event:checked')).map(cb => cb.value)
+  };
+}
+
+async function saveNotificationSettings() {
+  const statusEl = document.getElementById('notifyStatus');
+  try {
+    const res = await fetch('/api/notification-settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(readNotificationForm())
+    });
+    const result = await res.json();
+    statusEl.textContent = result.success ? 'Saved' : (result.error || 'Failed to save');
+    statusEl.className = `mt-3 text-sm ${result.success ? 'text-green-400' : 'text-red-400'}`;
+    if (result.success) await loadNotificationSettings();
+  } catch (err) {
+    statusEl.textContent = 'Failed to save';
+    statusEl.className = 'mt-3 text-sm text-red-400';
+  }
+}
+
+async function testNotificationSettings() {
+  const statusEl = document.getElementById('notifyStatus');
+  const btn = document.getElementById('notifyTestBtn');
+  btn.disabled = true;
+  statusEl.textContent = 'Sending test…';
+  statusEl.className = 'mt-3 text-sm text-gray-300';
+  try {
+    const res = await fetch('/api/notification-settings/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(readNotificationForm())
+    });
+    const result = await res.json();
+    statusEl.textContent = result.success ? result.message : (result.error || 'Test failed');
+    statusEl.className = `mt-3 text-sm ${result.success ? 'text-green-400' : 'text-red-400'}`;
+  } catch (err) {
+    statusEl.textContent = 'Test failed';
+    statusEl.className = 'mt-3 text-sm text-red-400';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   loadAiSettings();
+  loadNotificationSettings();
 
   const providerSelect = document.getElementById('aiProvider');
   if (providerSelect) {

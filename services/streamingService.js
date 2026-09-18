@@ -7,6 +7,7 @@ const { db } = require('../db/database');
 const Stream = require('../models/Stream');
 const Playlist = require('../models/Playlist');
 const Video = require('../models/Video');
+const notificationService = require('./notificationService');
 
 let ffmpegPath;
 if (fs.existsSync('/usr/bin/ffmpeg')) {
@@ -433,12 +434,14 @@ async function startStream(streamId, isRetry = false, baseUrl = null) {
         const ytResult = await youtubeService.createYouTubeBroadcast(streamId, effectiveBaseUrl);
         if (!ytResult.success) {
           addStreamLog(streamId, `YouTube broadcast failed: ${ytResult.error}`);
+          notificationService.notify('stream_start_failed', { title: 'Stream failed to start', streamId, streamTitle: stream.title, error: ytResult.error });
           return { success: false, error: ytResult.error || 'Failed to create YouTube broadcast' };
         }
         stream = await Stream.findById(streamId);
         addStreamLog(streamId, `YouTube broadcast created: ${ytResult.broadcastId}`);
       } catch (ytError) {
         addStreamLog(streamId, `YouTube API error: ${ytError.message}`);
+        notificationService.notify('stream_start_failed', { title: 'Stream failed to start (YouTube API)', streamId, streamTitle: stream.title, error: ytError.message });
         return { success: false, error: `YouTube API error: ${ytError.message}` };
       }
     }
@@ -513,6 +516,7 @@ async function startStream(streamId, isRetry = false, baseUrl = null) {
         const now = new Date();
         if (endTime.getTime() <= now.getTime()) {
           addStreamLog(streamId, 'Stream ended - scheduled end time reached');
+          notificationService.notify('stream_ended', { title: 'Stream ended (scheduled end time)', streamId, streamTitle: currentStream.title });
           if (wasActive) {
             try {
               await Stream.updateStatus(streamId, 'offline', currentStream.user_id);
@@ -537,6 +541,11 @@ async function startStream(streamId, isRetry = false, baseUrl = null) {
           const delay = getRetryDelay(retryCount);
 
           addStreamLog(streamId, `Retry #${retryCount + 1} in ${Math.round(delay / 1000)}s`);
+          notificationService.notify('stream_retry', {
+            title: `FFmpeg crashed – retry #${retryCount + 1}/${MAX_RETRY_ATTEMPTS}`,
+            message: `Exit code ${code}, signal ${signal}. Restarting in ${Math.round(delay / 1000)}s.`,
+            streamId, streamTitle: currentStream.title, key: `${streamId}:retry`
+          });
 
           setTimeout(async () => {
             try {
@@ -566,7 +575,18 @@ async function startStream(streamId, isRetry = false, baseUrl = null) {
           return;
         } else {
           addStreamLog(streamId, `Max retries (${MAX_RETRY_ATTEMPTS}) reached`);
+          notificationService.notify('stream_stopped', {
+            title: 'Stream STOPPED – retries exhausted',
+            message: `FFmpeg kept failing (exit code ${code}, signal ${signal}). The stream is now offline and needs manual attention.`,
+            streamId, streamTitle: currentStream.title
+          });
         }
+      } else if (wasActive && currentStream && currentStream.status !== 'offline' && !shouldRetry) {
+        notificationService.notify('stream_ended', {
+          title: 'Stream ended',
+          message: `FFmpeg exited normally (code ${code}).`,
+          streamId, streamTitle: currentStream.title
+        });
       }
 
       if (wasActive && currentStream) {
@@ -593,6 +613,14 @@ async function startStream(streamId, isRetry = false, baseUrl = null) {
       if (typeof schedulerService.scheduleStreamTerminationByEndTime === 'function') {
         schedulerService.scheduleStreamTerminationByEndTime(streamId, originalEndTime, stream.user_id);
       }
+    }
+
+    if (!isRetry) {
+      notificationService.notify('stream_started', {
+        title: 'Stream started',
+        message: stream.youtube_broadcast_id ? `Broadcast https://youtu.be/${stream.youtube_broadcast_id}` : `${stream.platform || 'RTMP'} stream is live.`,
+        streamId, streamTitle: stream.title
+      });
     }
 
     return {
@@ -800,6 +828,11 @@ async function healthCheckStreams() {
         
         const stream = await Stream.findById(streamId);
         if (stream && stream.status === 'live') {
+          notificationService.notify('stream_stale', {
+            title: 'Stream stale – restarting FFmpeg',
+            message: 'No FFmpeg output for 5 minutes. Killing the process and starting again.',
+            streamId, streamTitle: stream.title, key: `${streamId}:stale`
+          });
           if (stream.end_time) {
             const endTime = new Date(stream.end_time);
             if (endTime.getTime() <= Date.now()) {

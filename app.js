@@ -1725,6 +1725,59 @@ app.post('/api/ai-settings/test', isAuthenticated, async (req, res) => {
   }
 });
 
+app.get('/api/notification-settings', isAdmin, async (req, res) => {
+  try {
+    const notificationService = require('./services/notificationService');
+    const settings = await notificationService.getSettings(true);
+    res.json({
+      success: true,
+      settings: {
+        enabled: settings.enabled,
+        telegramTokenMasked: maskSecret(settings.telegramToken),
+        telegramChatId: settings.telegramChatId,
+        webhookUrl: settings.webhookUrl,
+        events: settings.events,
+        diskThreshold: settings.diskThreshold
+      },
+      availableEvents: Object.entries(notificationService.EVENTS).map(([key, v]) => ({ key, label: v.label, severity: v.severity }))
+    });
+  } catch (error) {
+    console.error('Error loading notification settings:', error);
+    res.status(500).json({ success: false, error: 'Failed to load notification settings' });
+  }
+});
+
+app.post('/api/notification-settings', isAdmin, async (req, res) => {
+  try {
+    const notificationService = require('./services/notificationService');
+    const { enabled, telegramToken, telegramChatId, webhookUrl, events, diskThreshold } = req.body;
+    const data = { enabled: !!enabled, telegramChatId, webhookUrl, events, diskThreshold };
+    if (telegramToken !== undefined && !isMaskedSecret(telegramToken)) data.telegramToken = telegramToken;
+    if (webhookUrl && !/^https?:\/\//i.test(String(webhookUrl).trim())) {
+      return res.status(400).json({ success: false, error: 'Webhook URL must start with http:// or https://' });
+    }
+    await notificationService.saveSettings(data);
+    res.json({ success: true, message: 'Notification settings saved' });
+  } catch (error) {
+    console.error('Error saving notification settings:', error);
+    res.status(500).json({ success: false, error: 'Failed to save notification settings' });
+  }
+});
+
+app.post('/api/notification-settings/test', isAdmin, async (req, res) => {
+  try {
+    const notificationService = require('./services/notificationService');
+    const overrides = {};
+    if (req.body.telegramToken && !isMaskedSecret(req.body.telegramToken)) overrides.telegramToken = String(req.body.telegramToken).trim();
+    if (req.body.telegramChatId !== undefined) overrides.telegramChatId = String(req.body.telegramChatId).trim();
+    if (req.body.webhookUrl !== undefined) overrides.webhookUrl = String(req.body.webhookUrl).trim();
+    const result = await notificationService.sendTest(overrides);
+    res.json({ success: true, message: result.errors.length ? `Sent, but one target failed: ${result.errors.join('; ')}` : 'Test message sent' });
+  } catch (error) {
+    res.status(400).json({ success: false, error: error.message });
+  }
+});
+
 app.get('/api/languages', isAuthenticated, (req, res) => {
   const { YOUTUBE_LANGUAGES, LANGUAGE_PRESETS } = require('./config/youtubeLanguages');
   res.json({ success: true, languages: YOUTUBE_LANGUAGES, presets: LANGUAGE_PRESETS });
@@ -3811,21 +3864,8 @@ app.put('/api/streams/:id', isAuthenticated, uploadThumbnail.single('thumbnail')
             }
             
             if (selectedChannel && selectedChannel.access_token) {
-              const clientSecret = decrypt(user.youtube_client_secret);
-              const accessToken = decrypt(selectedChannel.access_token);
-              const refreshToken = decrypt(selectedChannel.refresh_token);
-              
-              const protocol = req.headers['x-forwarded-proto'] || req.protocol;
-              const host = req.headers['x-forwarded-host'] || req.get('host');
-              const redirectUri = `${protocol}://${host}/auth/youtube/callback`;
-              
-              const oauth2Client = getYouTubeOAuth2Client(user.youtube_client_id, clientSecret, redirectUri);
-              oauth2Client.setCredentials({
-                access_token: accessToken,
-                refresh_token: refreshToken
-              });
-              
-              const youtube = google.youtube({ version: 'v3', auth: oauth2Client });
+              const { getYouTubeClientForChannel } = require('./services/youtubeService');
+              const youtube = getYouTubeClientForChannel(user, selectedChannel, getRequestRedirectUri(req));
               
               const broadcastUpdateData = {
                 id: stream.youtube_broadcast_id,
@@ -5133,6 +5173,7 @@ const server = app.listen(port, '0.0.0.0', async () => {
   }
   schedulerService.init(streamingService);
   rotationService.init();
+  require('./services/notificationService').init();
   try {
     await streamingService.syncStreamStatuses();
   } catch (error) {
@@ -5188,18 +5229,8 @@ app.get('/api/translate/videos', isAuthenticated, async (req, res) => {
       return res.status(403).json({ success: false, error: 'Not authorized' });
     }
 
-    const oauth2Client = new google.auth.OAuth2(
-      user.youtube_client_id,
-      decrypt(user.youtube_client_secret),
-      `${req.protocol}://${req.get('host')}/auth/youtube/callback`
-    );
-
-    oauth2Client.setCredentials({
-      access_token: decrypt(selectedChannel.access_token),
-      refresh_token: decrypt(selectedChannel.refresh_token)
-    });
-
-    const youtube = google.youtube({ version: 'v3', auth: oauth2Client });
+    const { getYouTubeClientForChannel } = require('./services/youtubeService');
+    const youtube = getYouTubeClientForChannel(user, selectedChannel, getRequestRedirectUri(req));
 
     let targetLanguages = [];
     try {
@@ -5402,18 +5433,8 @@ app.post('/api/translate/video', isAuthenticated, async (req, res) => {
       return res.status(403).json({ success: false, error: 'Not authorized' });
     }
 
-    const oauth2Client = new google.auth.OAuth2(
-      user.youtube_client_id,
-      decrypt(user.youtube_client_secret),
-      `${req.protocol}://${req.get('host')}/auth/youtube/callback`
-    );
-
-    oauth2Client.setCredentials({
-      access_token: decrypt(selectedChannel.access_token),
-      refresh_token: decrypt(selectedChannel.refresh_token)
-    });
-
-    const youtube = google.youtube({ version: 'v3', auth: oauth2Client });
+    const { getYouTubeClientForChannel } = require('./services/youtubeService');
+    const youtube = getYouTubeClientForChannel(user, selectedChannel, getRequestRedirectUri(req));
 
     const videoResponse = await youtube.videos.list({
       part: ['snippet', 'localizations'],

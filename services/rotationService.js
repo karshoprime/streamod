@@ -6,7 +6,8 @@ const { google } = require('googleapis');
 const { decrypt } = require('../utils/encryption');
 const path = require('path');
 const fs = require('fs');
-const { syncBroadcastMonetization, applyBroadcastLocalizations } = require('./youtubeService');
+const { syncBroadcastMonetization, applyBroadcastLocalizations, getYouTubeClientForChannel, handleYouTubeAuthError } = require('./youtubeService');
+const notificationService = require('./notificationService');
 const { normalizeAdSettings } = require('./adSettings');
 const { sanitizeLanguageList } = require('../config/youtubeLanguages');
 
@@ -238,6 +239,10 @@ async function checkRotations() {
         } else {
           // error lain tetap boleh muncul sekali-sekali
           console.error(`[RotationService] Failed to start rotation item ${currentIndex + 1}/${items.length}: ${currentItem.title} → ${result.error}`);
+          notificationService.notify('rotation_failed', {
+            title: `Rotation "${rotation.name}" failed to start item ${currentIndex + 1}/${items.length}`,
+            streamTitle: currentItem.title, error: result.error, key: `${rotation.id}:${currentItem.id}`
+          });
         }
 
       } else {
@@ -288,18 +293,7 @@ if (selectedChannel.auth_status === 'expired') {
   return { success: false, error: 'YouTube channel token expired. Please reconnect this channel.' };
 }
 
-    const oauth2Client = new google.auth.OAuth2(
-      user.youtube_client_id,
-      decrypt(user.youtube_client_secret),
-      getRedirectUri(user)
-    );
-
-    oauth2Client.setCredentials({
-      access_token: decrypt(selectedChannel.access_token),
-      refresh_token: decrypt(selectedChannel.refresh_token)
-    });
-
-    const youtube = google.youtube({ version: 'v3', auth: oauth2Client });
+    const youtube = getYouTubeClientForChannel(user, selectedChannel, getRedirectUri(user));
 
       const existingStreams = await Stream.findAll(rotation.user_id);
 
@@ -336,20 +330,7 @@ if (selectedChannel.auth_status === 'expired') {
             restartError.message
           );
 
- try {
-            if (isInvalidGrantError(restartError) && selectedChannel?.id) {
-              const YoutubeChannel = require('../models/YoutubeChannel');
-
-              await YoutubeChannel.update(selectedChannel.id, {
-                auth_status: 'expired',
-                auth_error: 'Token expired or revoked'
-              });
-
-              console.error(`[YouTube] Channel ${selectedChannel.channel_name} marked as expired`);
-            }
-          } catch (markErr) {
-            console.error('[YouTube] Failed to mark channel expired:', markErr.message);
-          }
+          await handleYouTubeAuthError(selectedChannel, restartError);
 
           return {
             success: false,
@@ -568,20 +549,7 @@ try {
     console.error('[RotationService] Error starting rotation stream:', error);
 
 
-try {
-    if (isInvalidGrantError(error) && selectedChannel?.id) {
-      const YoutubeChannel = require('../models/YoutubeChannel');
-
-      await YoutubeChannel.update(selectedChannel.id, {
-        auth_status: 'expired',
-        auth_error: 'Token expired or revoked'
-      });
-
-      console.error(`[YouTube] Channel ${selectedChannel.channel_name} marked as expired`);
-    }
-  } catch (markErr) {
-    console.error('[YouTube] Failed to mark channel expired:', markErr.message);
-  }
+    await handleYouTubeAuthError(selectedChannel, error);
 
     return { success: false, error: error.message };
   }
@@ -654,18 +622,7 @@ if (!rotationStream) {
           }
 
           if (selectedChannel && selectedChannel.access_token) {
-            const oauth2Client = new google.auth.OAuth2(
-              user.youtube_client_id,
-              decrypt(user.youtube_client_secret),
-              getRedirectUri(user)
-            );
-
-            oauth2Client.setCredentials({
-              access_token: decrypt(selectedChannel.access_token),
-              refresh_token: decrypt(selectedChannel.refresh_token)
-            });
-
-            const youtube = google.youtube({ version: 'v3', auth: oauth2Client });
+            const youtube = getYouTubeClientForChannel(user, selectedChannel, getRedirectUri(user));
 
             await youtube.liveBroadcasts.transition({
               part: ['status'],

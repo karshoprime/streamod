@@ -231,6 +231,14 @@ Provider diatur di **Settings → Integration → Translation Settings**:
 
 Halaman **Translate** dipakai untuk menerjemahkan video/live yang sudah ada di channel secara massal.
 
+## 🔔 Notifikasi Telegram / Webhook
+
+Settings → Integration → **Alert Notifications** (khusus admin). Isi token bot Telegram (dari @BotFather) + chat ID, dan/atau URL webhook (n8n, Discord, gateway WhatsApp, dll.), pilih event, lalu klik **Send test**.
+
+Event yang tersedia: stream berhenti setelah retry habis, FFmpeg crash & restart, stream stale (auto restart), stream gagal start (error YouTube API), stream mulai/berakhir, token channel YouTube expired, monetisasi ditolak YouTube, terjemahan gagal, item rotation gagal, disk hampir penuh (threshold bisa diatur), dan app restart. Alert yang sama tidak dikirim ulang dalam 10 menit.
+
+Token OAuth channel yang di-refresh otomatis oleh Google kini selalu disimpan kembali ke database di semua jalur (rotation, translate, edit stream), sehingga channel tidak lagi "expired" diam-diam. Kalau token benar-benar dicabut, channel ditandai *expired* dan notifikasi dikirim.
+
 ## 🔐 Reset Password
 
 Jika lupa password atau perlu reset akun:

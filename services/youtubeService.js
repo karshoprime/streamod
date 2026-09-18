@@ -14,6 +14,37 @@ const {
 } = require('./adSettings');
 const { translateMetadata } = require('./translationService');
 const { sanitizeLanguageList } = require('../config/youtubeLanguages');
+const notificationService = require('./notificationService');
+
+function isInvalidGrantError(error) {
+  return (
+    error?.response?.data?.error === 'invalid_grant' ||
+    error?.message?.includes('invalid_grant') ||
+    error?.response?.data?.error_description?.includes('expired or revoked')
+  );
+}
+
+/**
+ * Call from any catch block that talked to YouTube with a channel's tokens.
+ * Marks the channel expired (so the UI shows "Reconnect") and alerts once.
+ */
+async function handleYouTubeAuthError(channel, error) {
+  if (!channel || !isInvalidGrantError(error)) return false;
+  try {
+    if (channel.auth_status !== 'expired') {
+      await YoutubeChannel.update(channel.id, { auth_status: 'expired', auth_error: 'Token expired or revoked' });
+    }
+    notificationService.notify('channel_expired', {
+      title: 'YouTube channel needs reconnect',
+      message: 'The OAuth token was revoked or expired. Streams on this channel cannot start until you reconnect it in Settings → Integration.',
+      channelName: channel.channel_name,
+      key: channel.id
+    });
+  } catch (err) {
+    console.error('[YouTubeService] Failed marking channel expired:', err.message);
+  }
+  return true;
+}
 
 const loggedAlreadyHasBroadcast = new Set();
 
@@ -260,6 +291,19 @@ async function applyBroadcastLocalizations(youtube, videoId, { user, title, desc
 }
 
 async function createYouTubeBroadcast(streamId, baseUrl) {
+  try {
+    return await createYouTubeBroadcastInner(streamId, baseUrl);
+  } catch (error) {
+    try {
+      const stream = await Stream.findById(streamId);
+      const channel = stream?.youtube_channel_id ? await YoutubeChannel.findById(stream.youtube_channel_id) : null;
+      await handleYouTubeAuthError(channel, error);
+    } catch (e) { /* ignore */ }
+    throw error;
+  }
+}
+
+async function createYouTubeBroadcastInner(streamId, baseUrl) {
   const stream = await Stream.findById(streamId);
   if (!stream) {
     throw new Error('Stream not found');
@@ -363,6 +407,12 @@ async function createYouTubeBroadcast(streamId, baseUrl) {
       await syncBroadcastMonetization(youtube, broadcast.id, adSettings);
     } catch (monetizationError) {
       console.warn(`[YouTubeService] Failed to enable monetization for broadcast ${broadcast.id}. Continuing without monetization. Error: ${monetizationError.message}`);
+      notificationService.notify('monetization_rejected', {
+        title: 'YouTube rejected monetization settings',
+        message: 'The stream continues WITHOUT ads. Check that the channel is in the Partner Program and eligible for live ads.',
+        streamId, streamTitle: stream.title, channelName: selectedChannel.channel_name,
+        error: monetizationError.response?.data?.error?.message || monetizationError.message
+      });
       await Stream.update(streamId, {
         youtube_monetization: false,
         youtube_ad_settings: JSON.stringify({ ...adSettings, enabled: false })
@@ -418,6 +468,10 @@ async function createYouTubeBroadcast(streamId, baseUrl) {
       });
     } catch (locError) {
       console.warn(`[YouTubeService] Could not apply localizations for broadcast ${broadcast.id}: ${locError.message}`);
+      notificationService.notify('translation_failed', {
+        title: 'Translation failed',
+        streamId, streamTitle: stream.title, error: locError.response?.data?.error?.message || locError.message
+      });
     }
   }
 
@@ -519,6 +573,8 @@ module.exports = {
   getYouTubeClientForStream,
   getBroadcastMonetization,
   syncBroadcastMonetization,
+  handleYouTubeAuthError,
+  isInvalidGrantError,
   insertAdBreak,
   applyBroadcastLocalizations
 };
