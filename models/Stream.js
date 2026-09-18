@@ -33,7 +33,10 @@ class Stream {
       youtube_monetization = false,
       youtube_ad_settings = null,
       youtube_localizations = null,
-      youtube_source_language = null
+      youtube_source_language = null,
+      repeat_mode = 'none',
+      repeat_anchor_start = null,
+      repeat_anchor_end = null
     } = streamData;
     const loop_video_int = loop_video ? 1 : 0;
     const use_advanced_settings_int = use_advanced_settings ? 1 : 0;
@@ -48,14 +51,16 @@ class Stream {
           bitrate, resolution, fps, orientation, loop_video,
           schedule_time, end_time, duration, status, status_updated_at, use_advanced_settings, user_id,
           youtube_broadcast_id, youtube_stream_id, youtube_description, youtube_privacy, youtube_category, youtube_tags, youtube_thumbnail, youtube_channel_id, is_youtube_api, youtube_monetization,
-          youtube_ad_settings, youtube_localizations, youtube_source_language
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          youtube_ad_settings, youtube_localizations, youtube_source_language,
+          repeat_mode, repeat_anchor_start, repeat_anchor_end
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           id, title, video_id, rtmp_url, stream_key, platform, platform_icon,
           bitrate, resolution, fps, orientation, loop_video_int,
           schedule_time, end_time, duration, final_status, status_updated_at, use_advanced_settings_int, user_id,
           youtube_broadcast_id, youtube_stream_id, youtube_description, youtube_privacy, youtube_category, youtube_tags, youtube_thumbnail, youtube_channel_id, is_youtube_api_int, youtube_monetization_int,
-          youtube_ad_settings, youtube_localizations, youtube_source_language
+          youtube_ad_settings, youtube_localizations, youtube_source_language,
+          repeat_mode || 'none', repeat_anchor_start, repeat_anchor_end
         ],
         function (err) {
           if (err) {
@@ -437,6 +442,27 @@ class Stream {
       );
     });
   }
+  /** Offline streams that have a recurring schedule and should be rolled forward. */
+  static findRecurringOffline() {
+    return new Promise((resolve, reject) => {
+      db.all(
+        `SELECT * FROM streams
+         WHERE repeat_mode IN ('daily', 'weekly')
+           AND status = 'offline'
+           AND repeat_anchor_start IS NOT NULL
+           AND repeat_anchor_end IS NOT NULL`,
+        [],
+        (err, rows) => {
+          if (err) {
+            console.error('Error finding recurring streams:', err.message);
+            return reject(err);
+          }
+          resolve(rows || []);
+        }
+      );
+    });
+  }
+
   static findScheduledInRange(startTime, endTime) {
     return new Promise((resolve, reject) => {
       const endTimeStr = endTime.toISOString();

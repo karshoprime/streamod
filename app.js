@@ -48,6 +48,32 @@ function isMaskedSecret(value) {
 }
 
 /**
+ * Applies Repeat (recurring schedule) changes to a stream update payload.
+ * The anchor is the schedule the user typed; the scheduler rolls it forward.
+ */
+function applyRepeatToUpdate(req, stream, updateData) {
+  if (req.body.repeatMode === undefined) return;
+  const repeatMode = normalizeRepeatMode(req.body.repeatMode);
+  const start = 'schedule_time' in updateData ? updateData.schedule_time : stream.schedule_time;
+  const end = 'end_time' in updateData ? updateData.end_time : stream.end_time;
+  if (repeatMode !== 'none' && start && end) {
+    updateData.repeat_mode = repeatMode;
+    updateData.repeat_anchor_start = start;
+    updateData.repeat_anchor_end = end;
+  } else {
+    updateData.repeat_mode = 'none';
+    updateData.repeat_anchor_start = null;
+    updateData.repeat_anchor_end = null;
+  }
+}
+
+const REPEAT_MODES = ['none', 'daily', 'weekly'];
+function normalizeRepeatMode(value) {
+  const v = String(value || 'none').toLowerCase();
+  return REPEAT_MODES.includes(v) ? v : 'none';
+}
+
+/**
  * Accepts a JSON array string, an array, or a comma separated list of language codes.
  */
 function parseLanguageInput(value) {
@@ -3587,6 +3613,15 @@ app.post('/api/streams', isAuthenticated, [
     if (!streamData.status) {
       streamData.status = 'offline';
     }
+
+    // Recurring schedule (Repeat: daily / weekly) – needs both start and end
+    const repeatMode = normalizeRepeatMode(req.body.repeatMode);
+    if (repeatMode !== 'none' && streamData.schedule_time && streamData.end_time) {
+      streamData.repeat_mode = repeatMode;
+      streamData.repeat_anchor_start = streamData.schedule_time;
+      streamData.repeat_anchor_end = streamData.end_time;
+    }
+
     const stream = await Stream.create(streamData);
     res.json({ success: true, stream });
   } catch (error) {
@@ -3701,6 +3736,13 @@ app.post('/api/streams/youtube', isAuthenticated, uploadThumbnail.single('thumbn
       const [hours, minutes] = timePart.split(':').map(Number);
       const endDate = new Date(year, month - 1, day, hours, minutes);
       streamData.end_time = endDate.toISOString();
+    }
+
+    const repeatMode = normalizeRepeatMode(req.body.repeatMode);
+    if (repeatMode !== 'none' && streamData.schedule_time && streamData.end_time) {
+      streamData.repeat_mode = repeatMode;
+      streamData.repeat_anchor_start = streamData.schedule_time;
+      streamData.repeat_anchor_end = streamData.end_time;
     }
     
     const stream = await Stream.create(streamData);
@@ -3972,6 +4014,7 @@ app.put('/api/streams/:id', isAuthenticated, uploadThumbnail.single('thumbnail')
         }
       }
       
+      applyRepeatToUpdate(req, stream, updateData);
       await Stream.update(req.params.id, updateData);
       return res.json({ success: true, message: 'Stream updated successfully' });
     }
@@ -4073,6 +4116,7 @@ app.put('/api/streams/:id', isAuthenticated, uploadThumbnail.single('thumbnail')
       updateData.duration = null;
     }
     
+    applyRepeatToUpdate(req, stream, updateData);
     const updatedStream = await Stream.update(req.params.id, updateData);
     res.json({ success: true, stream: updatedStream });
   } catch (error) {

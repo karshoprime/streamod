@@ -384,6 +384,15 @@
                   <input type="datetime-local" id="scheduleEndTime" name="scheduleEndTime"
                     class="w-full h-[42px] px-4 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm [color-scheme:dark]">
                 </div>
+                <div>
+                  <label class="text-xs text-gray-400 block mb-1">Repeat</label>
+                  <select id="repeatMode" name="repeatMode" class="w-full h-[42px] px-4 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm">
+                    <option value="none" selected>Once</option>
+                    <option value="daily">Every day (same time)</option>
+                    <option value="weekly">Every week</option>
+                  </select>
+                  <p class="text-[11px] text-gray-500 mt-1">After the end time the stream is re-scheduled automatically with a fresh broadcast.</p>
+                </div>
               </div>
             </div>
             <div class="space-y-4">
@@ -643,6 +652,15 @@
                       </label>
                       <input type="datetime-local" id="ytScheduleEnd" name="ytScheduleEnd" class="w-full h-[42px] px-4 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm [color-scheme:dark]">
                     </div>
+                    <div>
+                  <label class="text-xs text-gray-400 block mb-1">Repeat</label>
+                  <select id="ytRepeatMode" name="repeatMode" class="w-full h-[42px] px-4 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm">
+                    <option value="none" selected>Once</option>
+                    <option value="daily">Every day (same time)</option>
+                    <option value="weekly">Every week</option>
+                  </select>
+                  <p class="text-[11px] text-gray-500 mt-1">After the end time the stream is re-scheduled automatically with a fresh broadcast.</p>
+                </div>
                   </div>
                 </div>
               </div>
@@ -855,6 +873,15 @@
                   </label>
                   <input type="datetime-local" id="editScheduleEndTime" name="scheduleEndTime"
                     class="w-full h-[42px] px-4 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm [color-scheme:dark]">
+                </div>
+                <div>
+                  <label class="text-xs text-gray-400 block mb-1">Repeat</label>
+                  <select id="editRepeatMode" name="repeatMode" class="w-full h-[42px] px-4 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm">
+                    <option value="none" selected>Once</option>
+                    <option value="daily">Every day (same time)</option>
+                    <option value="weekly">Every week</option>
+                  </select>
+                  <p class="text-[11px] text-gray-500 mt-1">After the end time the stream is re-scheduled automatically with a fresh broadcast.</p>
                 </div>
               </div>
             </div>
@@ -1093,6 +1120,15 @@
                       </label>
                       <input type="datetime-local" id="editYtScheduleEnd" name="ytScheduleEnd" class="w-full h-[42px] px-4 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm [color-scheme:dark]">
                     </div>
+                    <div>
+                  <label class="text-xs text-gray-400 block mb-1">Repeat</label>
+                  <select id="editYtRepeatMode" name="repeatMode" class="w-full h-[42px] px-4 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm">
+                    <option value="none" selected>Once</option>
+                    <option value="daily">Every day (same time)</option>
+                    <option value="weekly">Every week</option>
+                  </select>
+                  <p class="text-[11px] text-gray-500 mt-1">After the end time the stream is re-scheduled automatically with a fresh broadcast.</p>
+                </div>
                   </div>
                 </div>
               </div>
@@ -1595,7 +1631,12 @@
       if (window.StreamodLang) StreamodLang.render('ytLangPanelContainer', 'yt', { selected: [], sourceLanguage: 'en' });
     });
 
+    function resetRepeatSelects() {
+      ['repeatMode', 'ytRepeatMode'].forEach(id => { const el = document.getElementById(id); if (el) el.value = 'none'; });
+    }
+
     function resetYtMonetizationPanels() {
+      resetRepeatSelects();
       if (window.StreamodAds) StreamodAds.render('ytAdPanelContainer', 'yt', null);
       if (window.StreamodLang) StreamodLang.render('ytLangPanelContainer', 'yt', { selected: [], sourceLanguage: 'en' });
     }
@@ -1648,6 +1689,11 @@
           const scheduleEnd = document.getElementById('ytScheduleEnd').value;
           if (scheduleStart) ytFormData.scheduleStartTime = scheduleStart;
           if (scheduleEnd) ytFormData.scheduleEndTime = scheduleEnd;
+          ytFormData.repeatMode = document.getElementById('ytRepeatMode')?.value || 'none';
+          if (ytFormData.repeatMode !== 'none' && (!scheduleStart || !scheduleEnd)) {
+            showToast('error', 'Repeat needs both a start and an end time');
+            return;
+          }
         }
 
         const ytAdSettings = window.StreamodAds ? StreamodAds.read('yt') : { enabled: false };
@@ -1773,6 +1819,11 @@
       }
       if (scheduleEndTime) {
         formData.scheduleEndTime = scheduleEndTime;
+      }
+      formData.repeatMode = document.getElementById('repeatMode')?.value || 'none';
+      if (formData.repeatMode !== 'none' && (!scheduleStartTime || !scheduleEndTime)) {
+        showToast('error', 'Repeat needs both a start and an end time');
+        return;
       }
       fetch('/api/streams', {
         method: 'POST',
@@ -2003,6 +2054,9 @@
       } else if (endDate) {
         scheduleHTML = `<span class="text-[10px] text-green-500">End: ${endDate} ${endTime}</span>`;
       }
+      if (stream.repeat_mode && stream.repeat_mode !== 'none') {
+        scheduleHTML += ` <span class="inline-flex items-center gap-0.5 text-[10px] text-blue-400" title="Recurring schedule"><i class="ti ti-repeat text-[10px]"></i>${stream.repeat_mode === 'weekly' ? 'weekly' : 'daily'}</span>`;
+      }
       let youtubeInfoHTML = '';
       if (youtubeConnected && stream.youtube_channel_name) {
         youtubeInfoHTML = `<div class="flex items-center gap-1">${stream.youtube_channel_thumbnail ? `<img src="${stream.youtube_channel_thumbnail}" alt="" class="w-3 h-3 rounded-full object-cover">` : `<div class="w-3 h-3 rounded-full bg-red-600 flex items-center justify-center"><i class="ti ti-brand-youtube text-white text-[6px]"></i></div>`}<span class="text-[10px] text-gray-400">${stream.youtube_channel_name}</span></div>`;
@@ -2146,6 +2200,7 @@
         </div>
       </td>
       <td class="px-6 py-4 whitespace-nowrap">
+        ${(stream.repeat_mode && stream.repeat_mode !== 'none') ? `<div class="text-[10px] text-blue-400 mb-0.5" title="Recurring schedule"><i class="ti ti-repeat"></i> Repeats ${stream.repeat_mode}</div>` : ''}
         ${(() => {
           const endDate = stream.end_time ? new Date(stream.end_time) : null;
           if (scheduleDate && endDate) {
@@ -3211,6 +3266,8 @@
         
         editYtTags = stream.youtube_tags ? stream.youtube_tags.split(',').filter(t => t.trim()) : [];
         renderEditYtTags();
+        const editYtRepeat = document.getElementById('editYtRepeatMode');
+        if (editYtRepeat) editYtRepeat.value = stream.repeat_mode || 'none';
 
         if (window.StreamodAds) {
           StreamodAds.render('editYtAdPanelContainer', 'editYt',
@@ -3368,6 +3425,8 @@
       } else {
         document.getElementById('editScheduleStartTime').value = '';
       }
+      const editRepeat = document.getElementById('editRepeatMode');
+      if (editRepeat) editRepeat.value = (!isYoutubeStream && stream.repeat_mode) ? stream.repeat_mode : 'none';
       if (stream.end_time && !isYoutubeStream) {
         const endDate = new Date(stream.end_time);
         document.getElementById('editScheduleEndTime').value = formatDateTimeLocal(endDate);
@@ -3722,9 +3781,15 @@
             if (enableSchedule) {
               ytFormDataObj.scheduleStartTime = document.getElementById('editYtScheduleStart').value;
               ytFormDataObj.scheduleEndTime = document.getElementById('editYtScheduleEnd').value;
+              ytFormDataObj.repeatMode = document.getElementById('editYtRepeatMode')?.value || 'none';
+              if (ytFormDataObj.repeatMode !== 'none' && (!ytFormDataObj.scheduleStartTime || !ytFormDataObj.scheduleEndTime)) {
+                showToast('error', 'Repeat needs both a start and an end time');
+                return;
+              }
             } else {
               ytFormDataObj.scheduleStartTime = '';
               ytFormDataObj.scheduleEndTime = '';
+              ytFormDataObj.repeatMode = 'none';
             }
             
             const saveBtn = document.querySelector('#editStreamModal button[type="submit"]');
@@ -3824,6 +3889,11 @@
           }
           formData.scheduleStartTime = scheduleStartTime || '';
           formData.scheduleEndTime = scheduleEndTime || '';
+          formData.repeatMode = document.getElementById('editRepeatMode')?.value || 'none';
+          if (formData.repeatMode !== 'none' && (!scheduleStartTime || !scheduleEndTime)) {
+            showToast('error', 'Repeat needs both a start and an end time');
+            return;
+          }
           fetch(`/api/streams/${streamId}`, {
             method: 'PUT',
             headers: {

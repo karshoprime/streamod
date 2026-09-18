@@ -231,6 +231,10 @@ Provider diatur di **Settings → Integration → Translation Settings**:
 
 Halaman **Translate** dipakai untuk menerjemahkan video/live yang sudah ada di channel secara massal.
 
+## 🔁 Jadwal Berulang (Repeat)
+
+Di form Create/Edit stream (manual maupun YouTube), aktifkan **Enable Schedule**, isi Start & End, lalu pilih **Repeat**: *Once*, *Every day*, atau *Every week*. Setelah stream berakhir di End Time, jadwal digeser otomatis ke hari/minggu berikutnya (durasi sama) dan broadcast YouTube baru dibuat. Stream yang di-stop manual di tengah jendela tidak langsung restart — ia menunggu jadwal berikutnya. Untuk menghentikan permanen, ubah Repeat ke *Once* atau matikan schedule.
+
 ## 🔔 Notifikasi Telegram / Webhook
 
 Settings → Integration → **Alert Notifications** (khusus admin). Isi token bot Telegram (dari @BotFather) + chat ID, dan/atau URL webhook (n8n, Discord, gateway WhatsApp, dll.), pilih event, lalu klik **Send test**.

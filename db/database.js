@@ -399,7 +399,11 @@ function createTables() {
         ['rotation_items', 'youtube_ad_settings', 'TEXT'],
         ['stream_rotations', 'youtube_ad_settings', 'TEXT'],
         ['stream_rotations', 'youtube_localizations', 'TEXT'],
-        ['stream_rotations', 'youtube_source_language', 'TEXT']
+        ['stream_rotations', 'youtube_source_language', 'TEXT'],
+        // --- Recurring schedule for single streams (Repeat: none | daily | weekly)
+        ['streams', 'repeat_mode', "TEXT DEFAULT 'none'"],
+        ['streams', 'repeat_anchor_start', 'TEXT'],
+        ['streams', 'repeat_anchor_end', 'TEXT']
       ];
 
       extraColumns.forEach(([table, column, type]) => {

@@ -3,6 +3,8 @@ const Stream = require('../models/Stream');
 const scheduledTerminations = new Map();
 const SCHEDULE_CHECK_INTERVAL = 15000;
 const DURATION_CHECK_INTERVAL = 30000;
+const RECURRING_CHECK_INTERVAL = 60000;
+let recurringIntervalId = null;
 
 let streamingService = null;
 let initialized = false;
@@ -20,9 +22,76 @@ function init(streamingServiceInstance) {
 
   scheduleIntervalId = setInterval(checkScheduledStreams, SCHEDULE_CHECK_INTERVAL);
   durationIntervalId = setInterval(checkStreamDurations, DURATION_CHECK_INTERVAL);
+  recurringIntervalId = setInterval(checkRecurringStreams, RECURRING_CHECK_INTERVAL);
 
   checkScheduledStreams();
   checkStreamDurations();
+  setTimeout(checkRecurringStreams, 5000);
+}
+
+/**
+ * Next occurrence of an anchored window (start/end) strictly after `now`.
+ * daily → +1 day steps, weekly → +7 day steps; the window length is preserved.
+ */
+function getNextOccurrence(anchorStart, anchorEnd, repeatMode, now = new Date()) {
+  const start = new Date(anchorStart);
+  const end = new Date(anchorEnd);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) return null;
+
+  const stepDays = repeatMode === 'weekly' ? 7 : 1;
+  const nextStart = new Date(start);
+  const nextEnd = new Date(end);
+
+  // Roll forward until the window's START is in the future: a stream that was
+  // stopped inside today's window waits for the next occurrence instead of
+  // restarting immediately. Hard cap for safety.
+  let guard = 0;
+  while (nextStart <= now && guard < 4000) {
+    nextStart.setDate(nextStart.getDate() + stepDays);
+    nextEnd.setDate(nextEnd.getDate() + stepDays);
+    guard++;
+  }
+  return { start: nextStart, end: nextEnd };
+}
+
+/**
+ * Recurring streams (Repeat: daily / weekly): once a run has ended and the stream
+ * is offline, roll the schedule forward and put it back into 'scheduled'.
+ */
+async function checkRecurringStreams() {
+  try {
+    if (!streamingService) return;
+    const streams = await Stream.findRecurringOffline();
+    const now = new Date();
+
+    for (const stream of streams) {
+      if (streamingService.isStreamActive(stream.id) || streamingService.isStreamStarting(stream.id)) continue;
+
+      // Give a manual stop a short grace period so an operator can edit/delete first.
+      const stoppedAt = stream.status_updated_at ? new Date(stream.status_updated_at) : null;
+      if (stoppedAt && now - stoppedAt < 2 * 60 * 1000) continue;
+
+      const next = getNextOccurrence(stream.repeat_anchor_start, stream.repeat_anchor_end, stream.repeat_mode, now);
+      if (!next) continue;
+
+      const durationMinutes = Math.round((next.end - next.start) / 60000);
+      await Stream.update(stream.id, {
+        schedule_time: next.start.toISOString(),
+        end_time: next.end.toISOString(),
+        duration: durationMinutes > 0 ? durationMinutes : null,
+        status: 'scheduled',
+        // fresh broadcast next time
+        youtube_broadcast_id: null,
+        youtube_stream_id: null,
+        rtmp_url: stream.is_youtube_api ? '' : stream.rtmp_url,
+        stream_key: stream.is_youtube_api ? '' : stream.stream_key
+      });
+
+      console.log(`[Scheduler] Recurring stream "${stream.title}" rescheduled (${stream.repeat_mode}) for ${next.start.toISOString()}`);
+    }
+  } catch (error) {
+    console.error('[Scheduler] Error checking recurring streams:', error);
+  }
 }
 
 async function checkScheduledStreams() {
@@ -165,6 +234,9 @@ function shutdown() {
   if (durationIntervalId) {
     clearInterval(durationIntervalId);
   }
+  if (recurringIntervalId) {
+    clearInterval(recurringIntervalId);
+  }
 
   for (const [streamId, scheduled] of scheduledTerminations) {
     if (scheduled.timeoutId) {
@@ -182,5 +254,7 @@ module.exports = {
   handleStreamStopped,
   checkScheduledStreams,
   checkStreamDurations,
+  checkRecurringStreams,
+  getNextOccurrence,
   shutdown
 };
