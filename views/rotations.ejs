@@ -311,23 +311,28 @@
         </button>
       </div>
       <div class="p-4 sm:px-6 overflow-y-auto flex-grow">
-        <form id="rotationForm" class="space-y-6">
+        <form id="rotationForm" class="space-y-4">
           <input type="hidden" id="rotationId" name="rotationId" value="">
           
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label class="text-sm font-medium text-white block mb-2">Rotation Name</label>
-              <input type="text" id="rotationName" name="rotationName" class="w-full px-4 py-2.5 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary" placeholder="e.g., Lo-fi Jazz Stream" required>
+          <div class="bg-dark-800/60 border border-gray-700 rounded-lg p-4 space-y-4">
+            <div class="flex items-center gap-2 text-white">
+              <i class="ti ti-rotate text-blue-400"></i>
+              <span class="text-sm font-semibold">Rotation</span>
             </div>
-            <div>
-              <label class="text-sm font-medium text-white block mb-2">YouTube Channel</label>
-              <div class="relative" id="rotationChannelSelector">
-                <button type="button" onclick="toggleRotationChannelDropdown()" class="w-full flex items-center gap-3 px-3 py-2.5 bg-dark-700 border border-gray-600 rounded-lg hover:border-gray-500 focus:border-primary focus:ring-1 focus:ring-primary transition-colors text-left">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label class="text-xs text-gray-400 block mb-1">Rotation name</label>
+                <input type="text" id="rotationName" name="rotationName" class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg text-sm text-white focus:border-primary focus:ring-1 focus:ring-primary" placeholder="e.g., Lo-fi Jazz Stream" required>
+              </div>
+              <div>
+                <label class="text-xs text-gray-400 block mb-1">YouTube channel</label>
+                <div class="relative" id="rotationChannelSelector">
+                <button type="button" onclick="toggleRotationChannelDropdown()" class="w-full flex items-center gap-3 px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg hover:border-gray-500 text-sm focus:border-primary focus:ring-1 focus:ring-primary transition-colors text-left">
                   <img id="rotationChannelThumb" src="<%= typeof youtubeChannels !== 'undefined' && youtubeChannels.length > 0 ? (youtubeChannels.find(c => c.is_default) || youtubeChannels[0]).channel_thumbnail : '' %>" alt="" class="w-6 h-6 rounded-full object-cover flex-shrink-0" onerror="this.src='/images/default-avatar.jpg'">
                   <span id="rotationChannelName" class="flex-1 text-sm text-white truncate"><%= typeof youtubeChannels !== 'undefined' && youtubeChannels.length > 0 ? (youtubeChannels.find(c => c.is_default) || youtubeChannels[0]).channel_name : 'Select Channel' %></span>
                   <i class="ti ti-chevron-down text-gray-400 flex-shrink-0"></i>
                 </button>
-                <div id="rotationChannelDropdown" class="hidden absolute z-30 mt-1 w-full bg-dark-700 border border-gray-600 rounded-lg shadow-lg overflow-hidden">
+                <div id="rotationChannelDropdown" class="hidden absolute z-30 mt-1 w-full bg-dark-900 border border-gray-600 rounded-lg shadow-lg overflow-hidden">
                   <% if (typeof youtubeChannels !== 'undefined' && youtubeChannels.length > 0) { %>
                     <% youtubeChannels.forEach(function(channel) { %>
                     <button type="button" onclick="selectRotationChannel('<%= channel.id %>', '<%= channel.channel_name %>', '<%= channel.channel_thumbnail %>')" class="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-gray-600 text-left rotation-channel-option" data-channel-id="<%= channel.id %>">
@@ -339,74 +344,83 @@
                 </div>
                 <input type="hidden" id="rotationChannelId" name="rotationChannelId" value="<%= typeof youtubeChannels !== 'undefined' && youtubeChannels.length > 0 ? (youtubeChannels.find(c => c.is_default) || youtubeChannels[0]).id : '' %>">
               </div>
+              </div>
             </div>
           </div>
 
-          <div class="flex items-center gap-2 mb-2">
-            <span class="text-sm font-medium text-white">Schedule Settings</span>
-            <span id="rotationServerTime" class="bg-gray-700 text-xs text-gray-300 px-2 py-0.5 rounded">
-              Server time: loading...
-            </span>
-          </div>
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label class="text-sm font-medium text-white block mb-2">Start Time</label>
-              <input type="time" id="rotationStartTime" name="rotationStartTime" class="w-full px-4 py-2.5 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary [color-scheme:dark]" required>
-              <p class="text-xs text-gray-500 mt-1">Daily start time for the rotation</p>
+          <div class="bg-dark-800/60 border border-gray-700 rounded-lg p-4 space-y-4">
+            <div class="flex items-center gap-2 text-white">
+              <i class="ti ti-clock text-blue-400"></i>
+              <span class="text-sm font-semibold">Schedule</span>
+              <span id="rotationServerTime" class="bg-gray-700 text-[11px] text-gray-300 px-2 py-0.5 rounded ml-auto">Server time: loading...</span>
             </div>
-            <div>
-              <label class="text-sm font-medium text-white block mb-2">End Time <span id="rotationDurationBadge" class="bg-gray-700 text-xs text-gray-300 px-2 py-0.5 rounded ml-2">Duration: 00:00</span></label>
-              <input type="time" id="rotationEndTime" name="rotationEndTime" class="w-full px-4 py-2.5 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary [color-scheme:dark]" required>
-              <p class="text-xs text-gray-500 mt-1">Daily end time for the rotation</p>
-            </div>
-            <div>
-              <label class="text-sm font-medium text-white block mb-2">Repeat</label>
-              <select id="repeatMode" name="repeatMode" class="w-full px-4 py-2.5 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary">
-                <option value="daily" selected>Every Day</option>
-                <option value="weekly">Every Week</option>
-                <option value="monthly">Every Month</option>
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div>
-                <label class="text-sm font-medium text-white block mb-2">Privacy</label>
-                <select id="globalPrivacy" name="globalPrivacy" class="w-full px-4 py-2.5 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary">
+                <label class="text-xs text-gray-400 block mb-1">Start time</label>
+                <input type="time" id="rotationStartTime" name="rotationStartTime" class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg text-sm text-white focus:border-primary focus:ring-1 focus:ring-primary [color-scheme:dark]" required>
+                <div class="text-[11px] text-gray-500 mt-1">Daily start time for the rotation</div>
+              </div>
+              <div>
+                <label class="text-xs text-gray-400 block mb-1 flex items-center gap-2">End time <span id="rotationDurationBadge" class="bg-gray-700 text-[11px] text-gray-300 px-2 py-0.5 rounded">Duration: 00:00</span></label>
+                <input type="time" id="rotationEndTime" name="rotationEndTime" class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg text-sm text-white focus:border-primary focus:ring-1 focus:ring-primary [color-scheme:dark]" required>
+                <div class="text-[11px] text-gray-500 mt-1">Daily end time for the rotation</div>
+              </div>
+              <div>
+                <label class="text-xs text-gray-400 block mb-1">Repeat</label>
+                <select id="repeatMode" name="repeatMode" class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg text-sm text-white focus:border-primary focus:ring-1 focus:ring-primary">
+                  <option value="daily" selected>Every Day</option>
+                  <option value="weekly">Every Week</option>
+                  <option value="monthly">Every Month</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-dark-800/60 border border-gray-700 rounded-lg p-4 space-y-4">
+            <div class="flex items-center gap-2 text-white">
+              <i class="ti ti-brand-youtube text-red-400"></i>
+              <span class="text-sm font-semibold">Stream defaults</span>
+              <span class="text-[11px] text-gray-500 ml-auto">Applied to every item in this rotation</span>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <label class="text-xs text-gray-400 block mb-1">Privacy</label>
+                <select id="globalPrivacy" name="globalPrivacy" class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg text-sm text-white focus:border-primary focus:ring-1 focus:ring-primary">
                   <option value="public">Public</option>
                   <option value="unlisted" selected>Unlisted</option>
                   <option value="private">Private</option>
                 </select>
               </div>
               <div>
-                <label class="text-sm font-medium text-white block mb-2">Category</label>
-                <select id="globalCategory" name="globalCategory" class="w-full px-4 py-2.5 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary">
-                  <option value="22">People & Blogs</option>
+                <label class="text-xs text-gray-400 block mb-1">Category</label>
+                <select id="globalCategory" name="globalCategory" class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg text-sm text-white focus:border-primary focus:ring-1 focus:ring-primary">
+                  <option value="22">People &amp; Blogs</option>
                   <option value="20">Gaming</option>
                   <option value="24">Entertainment</option>
                   <option value="10">Music</option>
-                  <option value="28">Science & Technology</option>
+                  <option value="28">Science &amp; Technology</option>
                   <option value="17">Sports</option>
                   <option value="27">Education</option>
                 </select>
               </div>
               <div>
-                <label class="text-sm font-medium text-white block mb-2">Monetization</label>
-                <div class="h-[42px] px-4 bg-dark-700 border border-gray-600 rounded-lg flex items-center">
+                <label class="text-xs text-gray-400 block mb-1">Monetization</label>
+                <div class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg text-sm text-white focus:border-primary focus:ring-1 focus:ring-primary flex items-center">
                   <span id="rotationAdSummary" class="text-sm text-gray-300 truncate">Ads off</span>
                 </div>
               </div>
             </div>
-            <div class="space-y-4 mb-6">
-              <div id="rotationAdPanelContainer"></div>
-              <div id="rotationLangPanelContainer"></div>
-              <p class="text-xs text-gray-500">These monetization and translation settings apply to every stream in this rotation. While a rotation is live, use the <i class="ti ti-coin text-yellow-400"></i> button on the rotation card to change ads or run an ad break instantly.</p>
-            </div>
           </div>
 
+          <div id="rotationAdPanelContainer"></div>
+          <div id="rotationLangPanelContainer"></div>
+          <p class="text-xs text-gray-500">Monetization and translation settings apply to every stream in this rotation. While a rotation is live, use the <i class="ti ti-coin text-yellow-400"></i> button on the rotation card to change ads or run an ad break instantly.</p>
+
           <div class="border-t border-gray-700 pt-4">
-            <h4 class="text-sm font-medium text-white mb-4">Rotation Items</h4>
+            <div class="flex items-center gap-2 text-white mb-4">
+              <i class="ti ti-list-numbers text-blue-400"></i>
+              <span class="text-sm font-semibold">Rotation items</span>
+            </div>
             <div id="rotationItemsContainer" class="space-y-4"></div>
             <button type="button" onclick="addRotationItem()" class="mt-4 w-full flex items-center justify-center gap-2 px-4 py-3 bg-gray-700/50 hover:bg-gray-700 border-2 border-dashed border-gray-600 hover:border-gray-500 text-gray-400 hover:text-white rounded-lg transition-colors">
               <i class="ti ti-plus"></i>
