@@ -229,19 +229,19 @@
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div class="space-y-4">
                 <div class="relative">
-                  <label class="text-sm font-medium text-white block mb-2">Select Video</label>
+                  <label class="text-xs text-gray-400 block mb-1">Select Video</label>
                   <div class="relative">
                     <button type="button" onclick="toggleVideoSelector()"
-                      class="w-full flex items-center justify-between px-4 py-2.5 bg-dark-700 border border-gray-600 rounded-lg hover:border-primary focus:border-primary focus:ring-1 focus:ring-primary transition-colors text-left">
+                      class="w-full flex items-center justify-between px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg hover:border-primary focus:border-primary focus:ring-1 focus:ring-primary transition-colors text-left text-sm">
                       <span class="text-sm text-gray-300" id="selectedVideo">Choose a video...</span>
                       <i class="ti ti-chevron-down text-gray-400"></i>
                     </button>
                     <div id="videoSelectorDropdown"
-                      class="hidden absolute z-10 mt-2 w-full bg-dark-700 rounded-lg border border-gray-600 shadow-lg">
+                      class="hidden absolute z-10 mt-2 w-full bg-dark-900 rounded-lg border border-gray-600 shadow-lg">
                       <div class="p-2 border-b border-gray-600/50">
                         <div class="relative">
                           <input type="text" id="videoSearchInput"
-                            class="w-full bg-dark-800 text-white pl-8 pr-4 py-2 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary border border-gray-700"
+                            class="w-full bg-dark-900 text-white pl-8 pr-4 py-2 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary border border-gray-600"
                             placeholder="Search videos...">
                           <i class="ti ti-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
                         </div>
@@ -267,17 +267,17 @@
                   </div>
                 </div>
                 <div>
-                  <label class="text-sm font-medium text-white block mb-2">Stream Title</label>
+                  <label class="text-xs text-gray-400 block mb-1">Stream Title</label>
                   <input type="text"
-                    class="w-full px-4 py-2.5 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary"
+                    class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white"
                     placeholder="Enter stream title..." name="streamTitle" id="streamTitle" required>
                 </div>
                 <div class="space-y-4">
-                  <label class="text-sm font-medium text-white block">Stream Configuration</label>
+                  <label class="text-sm font-semibold text-white block">Stream Configuration</label>
                   <div class="space-y-3">
                     <div class="relative">
                       <input type="text" id="rtmpUrl" name="rtmpUrl"
-                        class="w-full pl-10 pr-12 py-2.5 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary"
+                        class="w-full pl-10 pr-12 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white"
                         placeholder="RTMP URL" required>
                       <i class="ti ti-link absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
                       <button type="button" id="platformSelector"
@@ -323,7 +323,7 @@
                     </div>
                     <div class="relative">
                       <input type="password" id="streamKey" name="streamKey"
-                        class="w-full pl-10 pr-12 py-2.5 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary"
+                        class="w-full pl-10 pr-12 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white"
                         placeholder="Stream Key" required>
                       <i class="ti ti-key absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
                       <button type="button" onclick="toggleStreamKeyVisibility()"
@@ -354,7 +354,7 @@
             </div>
             <div class="space-y-2 mt-4 mb-6">
               <div class="flex flex-col sm:flex-row sm:items-center">
-                <label class="text-sm font-medium text-white">Schedule Settings</label>
+                <label class="text-sm font-semibold text-white">Schedule Settings</label>
                 <span id="serverTimeDisplay"
                   class="mt-1 sm:mt-0 sm:ml-2 block sm:inline-block bg-gray-700 text-xs text-gray-300 px-2 py-0.5 rounded">
                   Server time: loading...
@@ -365,7 +365,7 @@
                   <label class="text-sm text-gray-300">Loop Video</label>
                   <label class="relative inline-flex items-center cursor-pointer">
                     <input type="checkbox" name="loopVideo" class="sr-only peer" checked>
-                    <div class="w-11 h-6 bg-dark-700 rounded-full peer peer-checked:bg-primary"></div>
+                    <div class="w-11 h-6 bg-dark-900 border border-gray-600 rounded-full peer peer-checked:bg-primary peer-checked:border-primary"></div>
                     <div
                       class="absolute left-[2px] top-[2px] w-5 h-5 bg-white rounded-full transition-all peer-checked:translate-x-5">
                     </div>
@@ -374,7 +374,7 @@
                 <div>
                   <label class="text-xs text-gray-400 block mb-1">Start Stream</label>
                   <input type="datetime-local" id="scheduleStartTime" name="scheduleStartTime"
-                    class="w-full h-[42px] px-4 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm [color-scheme:dark]">
+                    class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white [color-scheme:dark]">
                 </div>
                 <div>
                   <label class="text-xs text-gray-400 mb-1 flex items-end">
@@ -382,11 +382,11 @@
                     <span id="durationBadge" class="ml-2 bg-gray-700 text-xs text-gray-300 px-2 py-0.5 rounded hidden leading-none">00:00</span>
                   </label>
                   <input type="datetime-local" id="scheduleEndTime" name="scheduleEndTime"
-                    class="w-full h-[42px] px-4 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm [color-scheme:dark]">
+                    class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white [color-scheme:dark]">
                 </div>
                 <div>
                   <label class="text-xs text-gray-400 block mb-1">Repeat</label>
-                  <select id="repeatMode" name="repeatMode" class="w-full h-[42px] px-4 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm">
+                  <select id="repeatMode" name="repeatMode" class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white">
                     <option value="none" selected>Once</option>
                     <option value="daily">Every day (same time)</option>
                     <option value="weekly">Every week</option>
@@ -400,7 +400,7 @@
                 <button type="button" id="advancedSettingsToggle"
                   class="flex items-center justify-between w-full text-left">
                   <div class="flex items-center">
-                    <span class="text-sm font-medium text-white">Advanced Settings</span>
+                    <span class="text-sm font-semibold text-white">Advanced Settings</span>
                     <div class="relative ml-2 group">
                       <i class="ti ti-info-circle text-gray-400 hover:text-primary"></i>
                       <div
@@ -415,7 +415,7 @@
                   </div>
                   <label class="relative inline-flex items-center cursor-pointer">
                     <input type="checkbox" id="advancedSettingsCheckbox" class="sr-only peer">
-                    <div class="w-11 h-6 bg-dark-700 rounded-full peer peer-checked:bg-primary"></div>
+                    <div class="w-11 h-6 bg-dark-900 border border-gray-600 rounded-full peer peer-checked:bg-primary peer-checked:border-primary"></div>
                     <div class="absolute left-[2px] top-[2px] w-5 h-5 bg-white rounded-full transition-all peer-checked:translate-x-5"></div>
                   </label>
                 </button>
@@ -434,7 +434,7 @@
                       <div>
                         <label class="text-xs text-gray-400 block mb-1">Bitrate</label>
                         <select name="bitrate" id="bitrateSelect"
-                          class="w-full h-[42px] px-4 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm">
+                          class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white">
                           <option value="2500" selected>2500 kbps</option>
                           <option value="4000">4000 kbps</option>
                           <option value="6000">6000 kbps</option>
@@ -448,7 +448,7 @@
                       <div>
                         <label class="text-xs text-gray-400 block mb-1">Frame Rate</label>
                         <select name="fps" id="fpsSelect"
-                          class="w-full h-[42px] px-4 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm">
+                          class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white">
                           <option value="30" selected>30 FPS</option>
                           <option value="60">60 FPS</option>
                           <option value="120">120 FPS</option>
@@ -457,7 +457,7 @@
                       <div>
                         <label class="text-xs text-gray-400 block mb-1">Resolution</label>
                         <select id="resolutionSelect"
-                          class="w-full h-[42px] px-4 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm">
+                          class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white">
                           <option value="720" selected data-horizontal="1280x720" data-vertical="720x1280">720p HD
                           </option>
                           <option value="1080" data-horizontal="1920x1080" data-vertical="1080x1920">1080p Full HD
@@ -495,17 +495,17 @@
               <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div class="space-y-4">
                   <div>
-                    <label class="text-sm font-medium text-white block mb-2">Select Video</label>
+                    <label class="text-xs text-gray-400 block mb-1">Select Video</label>
                     <div class="relative">
                       <button type="button" onclick="toggleYoutubeVideoSelector()"
-                        class="w-full flex items-center justify-between px-4 py-2.5 bg-dark-700 border border-gray-600 rounded-lg hover:border-primary focus:border-primary focus:ring-1 focus:ring-primary transition-colors text-left">
+                        class="w-full flex items-center justify-between px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg hover:border-primary focus:border-primary focus:ring-1 focus:ring-primary transition-colors text-left text-sm">
                         <span class="text-sm text-gray-300" id="ytSelectedVideo">Choose a video...</span>
                         <i class="ti ti-chevron-down text-gray-400"></i>
                       </button>
-                      <div id="ytVideoSelectorDropdown" class="hidden absolute z-10 mt-2 w-full bg-dark-700 rounded-lg border border-gray-600 shadow-lg">
+                      <div id="ytVideoSelectorDropdown" class="hidden absolute z-10 mt-2 w-full bg-dark-900 rounded-lg border border-gray-600 shadow-lg">
                         <div class="p-2 border-b border-gray-600/50">
                           <div class="relative">
-                            <input type="text" id="ytVideoSearchInput" class="w-full bg-dark-800 text-white pl-8 pr-4 py-2 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary border border-gray-700" placeholder="Search videos...">
+                            <input type="text" id="ytVideoSearchInput" class="w-full bg-dark-900 text-white pl-8 pr-4 py-2 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary border border-gray-600" placeholder="Search videos...">
                             <i class="ti ti-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
                           </div>
                         </div>
@@ -516,27 +516,27 @@
                   <input type="hidden" id="ytSelectedVideoId" name="ytVideoId" value="">
 
                   <div>
-                    <label class="text-sm font-medium text-white block mb-2">Stream Title</label>
-                    <input type="text" id="ytStreamTitle" name="ytStreamTitle" class="w-full px-4 py-2.5 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary" placeholder="Enter stream title...">
+                    <label class="text-xs text-gray-400 block mb-1">Stream Title</label>
+                    <input type="text" id="ytStreamTitle" name="ytStreamTitle" class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white" placeholder="Enter stream title...">
                   </div>
 
                   <div>
-                    <label class="text-sm font-medium text-white block mb-2">Description</label>
-                    <textarea id="ytDescription" name="ytDescription" rows="3" class="w-full px-4 py-2.5 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary resize-y min-h-[60px]" placeholder="Enter stream description..."></textarea>
+                    <label class="text-xs text-gray-400 block mb-1">Description</label>
+                    <textarea id="ytDescription" name="ytDescription" rows="3" class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white resize-y min-h-[60px]" placeholder="Enter stream description..."></textarea>
                   </div>
 
                   <div class="grid grid-cols-2 gap-4">
                     <div>
-                      <label class="text-sm font-medium text-white block mb-2">Privacy</label>
-                      <select id="ytPrivacy" name="ytPrivacy" class="w-full px-4 py-2.5 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary">
+                      <label class="text-xs text-gray-400 block mb-1">Privacy</label>
+                      <select id="ytPrivacy" name="ytPrivacy" class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white">
                         <option value="public">Public</option>
                         <option value="unlisted" selected>Unlisted</option>
                         <option value="private">Private</option>
                       </select>
                     </div>
                     <div>
-                      <label class="text-sm font-medium text-white block mb-2">Category</label>
-                      <select id="ytCategory" name="ytCategory" class="w-full px-4 py-2.5 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary">
+                      <label class="text-xs text-gray-400 block mb-1">Category</label>
+                      <select id="ytCategory" name="ytCategory" class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white">
                         <option value="22">People & Blogs</option>
                         <option value="20">Gaming</option>
                         <option value="24">Entertainment</option>
@@ -552,8 +552,8 @@
                   </div>
 
                   <div>
-                    <label class="text-sm font-medium text-white block mb-2">Tags</label>
-                    <div id="ytTagsContainer" class="relative flex flex-wrap gap-2 p-2 bg-dark-700 border border-gray-600 rounded-lg min-h-[42px]">
+                    <label class="text-xs text-gray-400 block mb-1">Tags</label>
+                    <div id="ytTagsContainer" class="relative flex flex-wrap gap-2 p-2 bg-dark-900 border border-gray-600 rounded-lg min-h-[40px]">
                       <input type="text" id="ytTagsInput" class="flex-1 min-w-[100px] bg-transparent border-none outline-none text-white text-sm placeholder-gray-500" placeholder="Type and press Enter...">
                       <button type="button" onclick="clearYtTags()" class="absolute top-0 right-2 text-gray-400 hover:text-white transition-colors" title="Clear all tags">
                         <i class="ti ti-x text-sm"></i>
@@ -569,7 +569,7 @@
 
                 <div class="space-y-4">
                   <div>
-                    <label class="text-sm font-medium text-white block mb-2">Select Channel</label>
+                    <label class="text-xs text-gray-400 block mb-1">Select Channel</label>
                     <div class="bg-dark-900 rounded-lg p-3 border border-gray-700">
                       <div class="flex items-center justify-between gap-3">
                         <div class="flex items-center gap-3 min-w-0">
@@ -611,7 +611,7 @@
                   </div>
 
                   <div>
-                    <label class="text-sm font-medium text-white block mb-2">Thumbnail</label>
+                    <label class="text-xs text-gray-400 block mb-1">Thumbnail</label>
                     <div class="border-2 border-dashed border-gray-600 rounded-lg p-4 text-center hover:border-primary transition-colors cursor-pointer" onclick="document.getElementById('ytThumbnail').click()">
                       <input type="file" id="ytThumbnail" name="ytThumbnail" accept="image/*" class="hidden">
                       <div id="ytThumbnailPreview" class="hidden">
@@ -627,12 +627,12 @@
 
                   <div class="h-[42px] flex items-center justify-between">
                     <div class="flex items-center gap-2">
-                      <label class="text-sm text-gray-300">Enable Schedule</label>
+                      <label class="text-sm text-gray-200">Enable Schedule</label>
                       <span id="ytServerTimeDisplay" class="bg-gray-700 text-xs text-gray-300 px-2 py-0.5 rounded">loading...</span>
                     </div>
                     <label class="relative inline-flex items-center cursor-pointer">
                       <input type="checkbox" id="ytEnableSchedule" class="sr-only peer">
-                      <div class="w-11 h-6 bg-dark-700 rounded-full peer peer-checked:bg-primary"></div>
+                      <div class="w-11 h-6 bg-dark-900 border border-gray-600 rounded-full peer peer-checked:bg-primary peer-checked:border-primary"></div>
                       <div class="absolute left-[2px] top-[2px] w-5 h-5 bg-white rounded-full transition-all peer-checked:translate-x-5"></div>
                     </label>
                   </div>
@@ -643,18 +643,18 @@
                   <div id="ytScheduleSettings" class="hidden space-y-4">
                     <div>
                       <label class="text-xs text-gray-400 block mb-1">Start Time</label>
-                      <input type="datetime-local" id="ytScheduleStart" name="ytScheduleStart" class="w-full h-[42px] px-4 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm [color-scheme:dark]">
+                      <input type="datetime-local" id="ytScheduleStart" name="ytScheduleStart" class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white [color-scheme:dark]">
                     </div>
                     <div>
                       <label class="text-xs text-gray-400 mb-1 flex items-center">
                         <span>End Time</span>
                         <span id="ytDurationBadge" class="ml-2 bg-gray-700 text-xs text-gray-300 px-2 py-0.5 rounded hidden">00:00</span>
                       </label>
-                      <input type="datetime-local" id="ytScheduleEnd" name="ytScheduleEnd" class="w-full h-[42px] px-4 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm [color-scheme:dark]">
+                      <input type="datetime-local" id="ytScheduleEnd" name="ytScheduleEnd" class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white [color-scheme:dark]">
                     </div>
                     <div>
                   <label class="text-xs text-gray-400 block mb-1">Repeat</label>
-                  <select id="ytRepeatMode" name="repeatMode" class="w-full h-[42px] px-4 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm">
+                  <select id="ytRepeatMode" name="repeatMode" class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white">
                     <option value="none" selected>Once</option>
                     <option value="daily">Every day (same time)</option>
                     <option value="weekly">Every week</option>
@@ -719,19 +719,19 @@
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div class="space-y-4">
                 <div class="relative">
-                  <label class="text-sm font-medium text-white block mb-2">Select Video</label>
+                  <label class="text-xs text-gray-400 block mb-1">Select Video</label>
                   <div class="relative">
                     <button type="button" onclick="toggleEditVideoSelector()"
-                      class="w-full flex items-center justify-between px-4 py-2.5 bg-dark-700 border border-gray-600 rounded-lg hover:border-primary focus:border-primary focus:ring-1 focus:ring-primary transition-colors text-left">
+                      class="w-full flex items-center justify-between px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg hover:border-primary focus:border-primary focus:ring-1 focus:ring-primary transition-colors text-left text-sm">
                       <span class="text-sm text-gray-300" id="editSelectedVideo">Choose a video...</span>
                       <i class="ti ti-chevron-down text-gray-400"></i>
                     </button>
                     <div id="editVideoSelectorDropdown"
-                      class="hidden absolute z-10 mt-2 w-full bg-dark-700 rounded-lg border border-gray-600 shadow-lg">
+                      class="hidden absolute z-10 mt-2 w-full bg-dark-900 rounded-lg border border-gray-600 shadow-lg">
                       <div class="p-2 border-b border-gray-600/50">
                         <div class="relative">
                           <input type="text" id="editVideoSearchInput"
-                            class="w-full bg-dark-800 text-white pl-8 pr-4 py-2 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary border border-gray-700"
+                            class="w-full bg-dark-900 text-white pl-8 pr-4 py-2 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary border border-gray-600"
                             placeholder="Search videos...">
                           <i class="ti ti-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
                         </div>
@@ -757,17 +757,17 @@
                   </div>
                 </div>
                 <div>
-                  <label class="text-sm font-medium text-white block mb-2">Stream Title</label>
+                  <label class="text-xs text-gray-400 block mb-1">Stream Title</label>
                   <input type="text"
-                    class="w-full px-4 py-2.5 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary"
+                    class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white"
                     placeholder="Enter stream title..." name="streamTitle" id="editStreamTitle" required>
                 </div>
                 <div class="space-y-4">
-                  <label class="text-sm font-medium text-white block mb-3">Stream Configuration</label>
+                  <label class="text-xs text-gray-400 block mb-2">Stream Configuration</label>
                   <div class="space-y-3">
                     <div class="relative">
                       <input type="text" id="editRtmpUrl" name="rtmpUrl"
-                        class="w-full pl-10 pr-12 py-2.5 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary"
+                        class="w-full pl-10 pr-12 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white"
                         placeholder="RTMP URL" required>
                       <i class="ti ti-link absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
                       <button type="button" id="editPlatformSelector"
@@ -813,7 +813,7 @@
                     </div>
                     <div class="relative">
                       <input type="password" id="editStreamKey" name="streamKey"
-                        class="w-full pl-10 pr-12 py-2.5 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary"
+                        class="w-full pl-10 pr-12 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white"
                         placeholder="Stream Key" required>
                       <i class="ti ti-key absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
                       <button type="button" onclick="toggleEditStreamKeyVisibility()"
@@ -844,7 +844,7 @@
             </div>
             <div class="space-y-2 mt-4 mb-6">
               <div class="flex flex-col sm:flex-row sm:items-center">
-                <label class="text-sm font-medium text-white">Schedule Settings</label>
+                <label class="text-sm font-semibold text-white">Schedule Settings</label>
                 <span id="editServerTimeDisplay"
                   class="mt-1 sm:mt-0 sm:ml-2 block sm:inline-block bg-gray-700 text-xs text-gray-300 px-2 py-0.5 rounded">
                   Server time: loading...
@@ -855,7 +855,7 @@
                   <label class="text-sm text-gray-300">Loop Video</label>
                   <label class="relative inline-flex items-center cursor-pointer">
                     <input type="checkbox" name="loopVideo" id="editLoopVideo" class="sr-only peer" checked>
-                    <div class="w-11 h-6 bg-dark-700 rounded-full peer peer-checked:bg-primary"></div>
+                    <div class="w-11 h-6 bg-dark-900 border border-gray-600 rounded-full peer peer-checked:bg-primary peer-checked:border-primary"></div>
                     <div
                       class="absolute left-[2px] top-[2px] w-5 h-5 bg-white rounded-full transition-all peer-checked:translate-x-5">
                     </div>
@@ -864,7 +864,7 @@
                 <div>
                   <label class="text-xs text-gray-400 block mb-1">Start Stream</label>
                   <input type="datetime-local" id="editScheduleStartTime" name="scheduleStartTime"
-                    class="w-full h-[42px] px-4 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm [color-scheme:dark]">
+                    class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white [color-scheme:dark]">
                 </div>
                 <div>
                   <label class="text-xs text-gray-400 mb-1 flex items-end">
@@ -872,11 +872,11 @@
                     <span id="editDurationBadge" class="ml-2 bg-gray-700 text-xs text-gray-300 px-2 py-0.5 rounded hidden leading-none">00:00</span>
                   </label>
                   <input type="datetime-local" id="editScheduleEndTime" name="scheduleEndTime"
-                    class="w-full h-[42px] px-4 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm [color-scheme:dark]">
+                    class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white [color-scheme:dark]">
                 </div>
                 <div>
                   <label class="text-xs text-gray-400 block mb-1">Repeat</label>
-                  <select id="editRepeatMode" name="repeatMode" class="w-full h-[42px] px-4 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm">
+                  <select id="editRepeatMode" name="repeatMode" class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white">
                     <option value="none" selected>Once</option>
                     <option value="daily">Every day (same time)</option>
                     <option value="weekly">Every week</option>
@@ -890,7 +890,7 @@
                 <button type="button" id="editAdvancedSettingsToggle"
                   class="flex items-center justify-between w-full text-left">
                   <div class="flex items-center">
-                    <span class="text-sm font-medium text-white">Advanced Settings</span>
+                    <span class="text-sm font-semibold text-white">Advanced Settings</span>
                     <div class="relative ml-2 group">
                       <i class="ti ti-info-circle text-gray-400 hover:text-primary"></i>
                       <div
@@ -905,7 +905,7 @@
                   </div>
                   <label class="relative inline-flex items-center cursor-pointer">
                     <input type="checkbox" id="editAdvancedSettingsCheckbox" class="sr-only peer">
-                    <div class="w-11 h-6 bg-dark-700 rounded-full peer peer-checked:bg-primary"></div>
+                    <div class="w-11 h-6 bg-dark-900 border border-gray-600 rounded-full peer peer-checked:bg-primary peer-checked:border-primary"></div>
                     <div class="absolute left-[2px] top-[2px] w-5 h-5 bg-white rounded-full transition-all peer-checked:translate-x-5"></div>
                   </label>
                 </button>
@@ -924,7 +924,7 @@
                       <div>
                         <label class="text-xs text-gray-400 block mb-1">Bitrate</label>
                         <select name="bitrate" id="editBitrate"
-                          class="w-full h-[42px] px-4 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm">
+                          class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white">
                           <option value="2500">2500 kbps</option>
                           <option value="4000">4000 kbps</option>
                           <option value="6000">6000 kbps</option>
@@ -938,7 +938,7 @@
                       <div>
                         <label class="text-xs text-gray-400 block mb-1">Frame Rate</label>
                         <select name="fps" id="editFps"
-                          class="w-full h-[42px] px-4 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm">
+                          class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white">
                           <option value="30">30 FPS</option>
                           <option value="60">60 FPS</option>
                           <option value="120">120 FPS</option>
@@ -947,7 +947,7 @@
                       <div>
                         <label class="text-xs text-gray-400 block mb-1">Resolution</label>
                         <select id="editResolutionSelect"
-                          class="w-full h-[42px] px-4 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm">
+                          class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white">
                           <option value="720" selected data-horizontal="1280x720" data-vertical="720x1280">720p HD
                           </option>
                           <option value="1080" data-horizontal="1920x1080" data-vertical="1080x1920">1080p Full HD
@@ -985,17 +985,17 @@
               <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div class="space-y-4">
                   <div>
-                    <label class="text-sm font-medium text-white block mb-2">Select Video</label>
+                    <label class="text-xs text-gray-400 block mb-1">Select Video</label>
                     <div class="relative">
                       <button type="button" onclick="toggleEditYoutubeVideoSelector()"
-                        class="w-full flex items-center justify-between px-4 py-2.5 bg-dark-700 border border-gray-600 rounded-lg hover:border-primary focus:border-primary focus:ring-1 focus:ring-primary transition-colors text-left">
+                        class="w-full flex items-center justify-between px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg hover:border-primary focus:border-primary focus:ring-1 focus:ring-primary transition-colors text-left text-sm">
                         <span class="text-sm text-gray-300" id="editYtSelectedVideo">Choose a video...</span>
                         <i class="ti ti-chevron-down text-gray-400"></i>
                       </button>
-                      <div id="editYtVideoSelectorDropdown" class="hidden absolute z-10 mt-2 w-full bg-dark-700 rounded-lg border border-gray-600 shadow-lg">
+                      <div id="editYtVideoSelectorDropdown" class="hidden absolute z-10 mt-2 w-full bg-dark-900 rounded-lg border border-gray-600 shadow-lg">
                         <div class="p-2 border-b border-gray-600/50">
                           <div class="relative">
-                            <input type="text" id="editYtVideoSearchInput" class="w-full bg-dark-800 text-white pl-8 pr-4 py-2 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary border border-gray-700" placeholder="Search videos...">
+                            <input type="text" id="editYtVideoSearchInput" class="w-full bg-dark-900 text-white pl-8 pr-4 py-2 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary border border-gray-600" placeholder="Search videos...">
                             <i class="ti ti-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
                           </div>
                         </div>
@@ -1006,27 +1006,27 @@
                   <input type="hidden" id="editYtSelectedVideoId" name="ytVideoId" value="">
 
                   <div>
-                    <label class="text-sm font-medium text-white block mb-2">Stream Title</label>
-                    <input type="text" id="editYtStreamTitle" name="ytStreamTitle" class="w-full px-4 py-2.5 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary" placeholder="Enter stream title...">
+                    <label class="text-xs text-gray-400 block mb-1">Stream Title</label>
+                    <input type="text" id="editYtStreamTitle" name="ytStreamTitle" class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white" placeholder="Enter stream title...">
                   </div>
 
                   <div>
-                    <label class="text-sm font-medium text-white block mb-2">Description</label>
-                    <textarea id="editYtDescription" name="ytDescription" rows="3" class="w-full px-4 py-2.5 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary resize-y min-h-[60px]" placeholder="Enter stream description..."></textarea>
+                    <label class="text-xs text-gray-400 block mb-1">Description</label>
+                    <textarea id="editYtDescription" name="ytDescription" rows="3" class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white resize-y min-h-[60px]" placeholder="Enter stream description..."></textarea>
                   </div>
 
                   <div class="grid grid-cols-2 gap-4">
                     <div>
-                      <label class="text-sm font-medium text-white block mb-2">Privacy</label>
-                      <select id="editYtPrivacy" name="ytPrivacy" class="w-full px-4 py-2.5 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary">
+                      <label class="text-xs text-gray-400 block mb-1">Privacy</label>
+                      <select id="editYtPrivacy" name="ytPrivacy" class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white">
                         <option value="public">Public</option>
                         <option value="unlisted" selected>Unlisted</option>
                         <option value="private">Private</option>
                       </select>
                     </div>
                     <div>
-                      <label class="text-sm font-medium text-white block mb-2">Category</label>
-                      <select id="editYtCategory" name="ytCategory" class="w-full px-4 py-2.5 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary">
+                      <label class="text-xs text-gray-400 block mb-1">Category</label>
+                      <select id="editYtCategory" name="ytCategory" class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white">
                         <option value="22">People & Blogs</option>
                         <option value="20">Gaming</option>
                         <option value="24">Entertainment</option>
@@ -1042,8 +1042,8 @@
                   </div>
 
                   <div>
-                    <label class="text-sm font-medium text-white block mb-2">Tags</label>
-                    <div id="editYtTagsContainer" class="relative flex flex-wrap gap-2 p-2 bg-dark-700 border border-gray-600 rounded-lg min-h-[42px]">
+                    <label class="text-xs text-gray-400 block mb-1">Tags</label>
+                    <div id="editYtTagsContainer" class="relative flex flex-wrap gap-2 p-2 bg-dark-900 border border-gray-600 rounded-lg min-h-[40px]">
                       <input type="text" id="editYtTagsInput" class="flex-1 min-w-[100px] bg-transparent border-none outline-none text-white text-sm placeholder-gray-500" placeholder="Type and press Enter...">
                       <button type="button" onclick="clearEditYtTags()" class="absolute top-0 right-2 text-gray-400 hover:text-white transition-colors" title="Clear all tags">
                         <i class="ti ti-x text-sm"></i>
@@ -1059,7 +1059,7 @@
 
                 <div class="space-y-4">
                   <div>
-                    <label class="text-sm font-medium text-white block mb-2">YouTube Channel</label>
+                    <label class="text-xs text-gray-400 block mb-1">YouTube Channel</label>
                     <div class="bg-dark-900 rounded-lg p-3 border border-gray-700">
                       <div class="flex items-center justify-between gap-3">
                         <div class="flex items-center gap-3 min-w-0">
@@ -1079,7 +1079,7 @@
                   </div>
 
                   <div>
-                    <label class="text-sm font-medium text-white block mb-2">Thumbnail</label>
+                    <label class="text-xs text-gray-400 block mb-1">Thumbnail</label>
                     <div class="border-2 border-dashed border-gray-600 rounded-lg p-4 text-center hover:border-primary transition-colors cursor-pointer" onclick="document.getElementById('editYtThumbnail').click()">
                       <input type="file" id="editYtThumbnail" name="editYtThumbnail" accept="image/*" class="hidden">
                       <div id="editYtThumbnailPreview" class="hidden">
@@ -1095,12 +1095,12 @@
 
                   <div class="h-[42px] flex items-center justify-between">
                     <div class="flex items-center gap-2">
-                      <label class="text-sm text-gray-300">Enable Schedule</label>
+                      <label class="text-sm text-gray-200">Enable Schedule</label>
                       <span id="editYtServerTimeDisplay" class="bg-gray-700 text-xs text-gray-300 px-2 py-0.5 rounded">loading...</span>
                     </div>
                     <label class="relative inline-flex items-center cursor-pointer">
                       <input type="checkbox" id="editYtEnableSchedule" class="sr-only peer">
-                      <div class="w-11 h-6 bg-dark-700 rounded-full peer peer-checked:bg-primary"></div>
+                      <div class="w-11 h-6 bg-dark-900 border border-gray-600 rounded-full peer peer-checked:bg-primary peer-checked:border-primary"></div>
                       <div class="absolute left-[2px] top-[2px] w-5 h-5 bg-white rounded-full transition-all peer-checked:translate-x-5"></div>
                     </label>
                   </div>
@@ -1111,18 +1111,18 @@
                   <div id="editYtScheduleSettings" class="hidden space-y-4">
                     <div>
                       <label class="text-xs text-gray-400 block mb-1">Start Time</label>
-                      <input type="datetime-local" id="editYtScheduleStart" name="ytScheduleStart" class="w-full h-[42px] px-4 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm [color-scheme:dark]">
+                      <input type="datetime-local" id="editYtScheduleStart" name="ytScheduleStart" class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white [color-scheme:dark]">
                     </div>
                     <div>
                       <label class="text-xs text-gray-400 mb-1 flex items-center">
                         <span>End Time</span>
                         <span id="editYtDurationBadge" class="ml-2 bg-gray-700 text-xs text-gray-300 px-2 py-0.5 rounded hidden">00:00</span>
                       </label>
-                      <input type="datetime-local" id="editYtScheduleEnd" name="ytScheduleEnd" class="w-full h-[42px] px-4 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm [color-scheme:dark]">
+                      <input type="datetime-local" id="editYtScheduleEnd" name="ytScheduleEnd" class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white [color-scheme:dark]">
                     </div>
                     <div>
                   <label class="text-xs text-gray-400 block mb-1">Repeat</label>
-                  <select id="editYtRepeatMode" name="repeatMode" class="w-full h-[42px] px-4 bg-dark-700 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm">
+                  <select id="editYtRepeatMode" name="repeatMode" class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white">
                     <option value="none" selected>Once</option>
                     <option value="daily">Every day (same time)</option>
                     <option value="weekly">Every week</option>
