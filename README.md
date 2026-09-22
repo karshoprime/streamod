@@ -235,6 +235,12 @@ Halaman **Translate** dipakai untuk menerjemahkan video/live yang sudah ada di c
 
 Di form Create/Edit stream (manual maupun YouTube), aktifkan **Enable Schedule**, isi Start & End, lalu pilih **Repeat**: *Once*, *Every day*, atau *Every week*. Setelah stream berakhir di End Time, jadwal digeser otomatis ke hari/minggu berikutnya (durasi sama) dan broadcast YouTube baru dibuat. Stream yang di-stop manual di tengah jendela tidak langsung restart — ia menunggu jadwal berikutnya. Untuk menghentikan permanen, ubah Repeat ke *Once* atau matikan schedule.
 
+## 🔑 Stream Name (Key Stream) & Live Nonstop
+
+Di form Create/Edit stream YouTube ada field **Stream Name (key stream)**: isi dengan nama yang sama untuk beberapa stream/jadwal ulang dan semuanya berbagi satu key stream YouTube (RTMP url/key) yang sama — persis seperti nama rotation yang otomatis dipakai sebagai nama key stream-nya. Nama baru (atau dikosongkan) = key stream baru dibuat.
+
+Tombol **Live Nonstop** (ikon ∞) di form Create/Edit stream (manual maupun YouTube) membuat stream berjalan 24/7: tidak ada Start/End/Repeat, dan kalau FFmpeg crash ia terus di-restart otomatis tanpa batas retry (bukan berhenti setelah 15x percobaan seperti stream biasa).
+
 ## 🔔 Notifikasi Telegram / Webhook
 
 Settings → Integration → **Alert Notifications** (khusus admin). Isi token bot Telegram (dari @BotFather) + chat ID, dan/atau URL webhook (n8n, Discord, gateway WhatsApp, dll.), pilih event, lalu klik **Send test**.

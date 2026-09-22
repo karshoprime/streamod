@@ -353,14 +353,25 @@
               </div>
             </div>
             <div class="space-y-2 mt-4 mb-6">
-              <div class="flex flex-col sm:flex-row sm:items-center">
-                <label class="text-sm font-semibold text-white">Schedule Settings</label>
-                <span id="serverTimeDisplay"
-                  class="mt-1 sm:mt-0 sm:ml-2 block sm:inline-block bg-gray-700 text-xs text-gray-300 px-2 py-0.5 rounded">
-                  Server time: loading...
-                </span>
+              <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+                <div class="flex flex-col sm:flex-row sm:items-center">
+                  <label class="text-sm font-semibold text-white">Schedule Settings</label>
+                  <span id="serverTimeDisplay"
+                    class="mt-1 sm:mt-0 sm:ml-2 block sm:inline-block bg-gray-700 text-xs text-gray-300 px-2 py-0.5 rounded">
+                    Server time: loading...
+                  </span>
+                </div>
+                <label class="mt-2 sm:mt-0 relative inline-flex items-center cursor-pointer gap-2">
+                  <span class="text-sm text-gray-200 flex items-center gap-1"><i class="ti ti-infinity text-primary"></i>Live Nonstop</span>
+                  <span class="relative inline-flex items-center">
+                    <input type="checkbox" id="nonstopMode" class="sr-only peer">
+                    <div class="w-11 h-6 bg-dark-900 border border-gray-600 rounded-full peer peer-checked:bg-primary peer-checked:border-primary"></div>
+                    <div class="absolute left-[2px] top-[2px] w-5 h-5 bg-white rounded-full transition-all peer-checked:translate-x-5"></div>
+                  </span>
+                </label>
               </div>
-              <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <p id="nonstopHint" class="hidden text-[11px] text-gray-500">Live Nonstop: the stream loops forever with no end time and restarts itself if it drops. Schedule/Repeat below are disabled.</p>
+              <div id="scheduleFieldsGrid" class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div class="h-[42px] mt-3 flex items-center justify-between">
                   <label class="text-sm text-gray-300">Loop Video</label>
                   <label class="relative inline-flex items-center cursor-pointer">
@@ -371,12 +382,12 @@
                     </div>
                   </label>
                 </div>
-                <div>
+                <div class="scheduleOnlyField">
                   <label class="text-xs text-gray-400 block mb-1">Start Stream</label>
                   <input type="datetime-local" id="scheduleStartTime" name="scheduleStartTime"
                     class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white [color-scheme:dark]">
                 </div>
-                <div>
+                <div class="scheduleOnlyField">
                   <label class="text-xs text-gray-400 mb-1 flex items-end">
                     <span>End Stream</span>
                     <span id="durationBadge" class="ml-2 bg-gray-700 text-xs text-gray-300 px-2 py-0.5 rounded hidden leading-none">00:00</span>
@@ -384,7 +395,7 @@
                   <input type="datetime-local" id="scheduleEndTime" name="scheduleEndTime"
                     class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white [color-scheme:dark]">
                 </div>
-                <div>
+                <div class="scheduleOnlyField">
                   <label class="text-xs text-gray-400 block mb-1">Repeat</label>
                   <select id="repeatMode" name="repeatMode" class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white">
                     <option value="none" selected>Once</option>
@@ -521,6 +532,12 @@
                   </div>
 
                   <div>
+                    <label class="text-xs text-gray-400 block mb-1">Stream Name <span class="text-gray-600">(key stream)</span></label>
+                    <input type="text" id="ytKeyStreamName" name="keyStreamName" class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white" placeholder="e.g. Rain ASMR Main">
+                    <p class="text-[11px] text-gray-500 mt-1">Same name as an existing stream? Its key stream (RTMP url/key) is reused. New name = a new key stream.</p>
+                  </div>
+
+                  <div>
                     <label class="text-xs text-gray-400 block mb-1">Description</label>
                     <textarea id="ytDescription" name="ytDescription" rows="3" class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white resize-y min-h-[60px]" placeholder="Enter stream description..."></textarea>
                   </div>
@@ -636,6 +653,16 @@
                       <div class="absolute left-[2px] top-[2px] w-5 h-5 bg-white rounded-full transition-all peer-checked:translate-x-5"></div>
                     </label>
                   </div>
+
+                  <div class="h-[42px] flex items-center justify-between">
+                    <label class="text-sm text-gray-200 flex items-center gap-1"><i class="ti ti-infinity text-primary"></i>Live Nonstop</label>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                      <input type="checkbox" id="ytNonstopMode" class="sr-only peer">
+                      <div class="w-11 h-6 bg-dark-900 border border-gray-600 rounded-full peer peer-checked:bg-primary peer-checked:border-primary"></div>
+                      <div class="absolute left-[2px] top-[2px] w-5 h-5 bg-white rounded-full transition-all peer-checked:translate-x-5"></div>
+                    </label>
+                  </div>
+                  <p id="ytNonstopHint" class="hidden text-[11px] text-gray-500 -mt-2">Live Nonstop: loops forever, no end time, restarts itself if it drops. Turns Enable Schedule off.</p>
 
                   <div id="ytAdPanelContainer"></div>
                   <div id="ytLangPanelContainer"></div>
@@ -843,14 +870,25 @@
               </div>
             </div>
             <div class="space-y-2 mt-4 mb-6">
-              <div class="flex flex-col sm:flex-row sm:items-center">
-                <label class="text-sm font-semibold text-white">Schedule Settings</label>
-                <span id="editServerTimeDisplay"
-                  class="mt-1 sm:mt-0 sm:ml-2 block sm:inline-block bg-gray-700 text-xs text-gray-300 px-2 py-0.5 rounded">
-                  Server time: loading...
-                </span>
+              <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+                <div class="flex flex-col sm:flex-row sm:items-center">
+                  <label class="text-sm font-semibold text-white">Schedule Settings</label>
+                  <span id="editServerTimeDisplay"
+                    class="mt-1 sm:mt-0 sm:ml-2 block sm:inline-block bg-gray-700 text-xs text-gray-300 px-2 py-0.5 rounded">
+                    Server time: loading...
+                  </span>
+                </div>
+                <label class="mt-2 sm:mt-0 relative inline-flex items-center cursor-pointer gap-2">
+                  <span class="text-sm text-gray-200 flex items-center gap-1"><i class="ti ti-infinity text-primary"></i>Live Nonstop</span>
+                  <span class="relative inline-flex items-center">
+                    <input type="checkbox" id="editNonstopMode" class="sr-only peer">
+                    <div class="w-11 h-6 bg-dark-900 border border-gray-600 rounded-full peer peer-checked:bg-primary peer-checked:border-primary"></div>
+                    <div class="absolute left-[2px] top-[2px] w-5 h-5 bg-white rounded-full transition-all peer-checked:translate-x-5"></div>
+                  </span>
+                </label>
               </div>
-              <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <p id="editNonstopHint" class="hidden text-[11px] text-gray-500">Live Nonstop: the stream loops forever with no end time and restarts itself if it drops. Schedule/Repeat below are disabled.</p>
+              <div id="editScheduleFieldsGrid" class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div class="h-[42px] flex items-center justify-between">
                   <label class="text-sm text-gray-300">Loop Video</label>
                   <label class="relative inline-flex items-center cursor-pointer">
@@ -861,12 +899,12 @@
                     </div>
                   </label>
                 </div>
-                <div>
+                <div class="scheduleOnlyField">
                   <label class="text-xs text-gray-400 block mb-1">Start Stream</label>
                   <input type="datetime-local" id="editScheduleStartTime" name="scheduleStartTime"
                     class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white [color-scheme:dark]">
                 </div>
-                <div>
+                <div class="scheduleOnlyField">
                   <label class="text-xs text-gray-400 mb-1 flex items-end">
                     <span>End Stream</span>
                     <span id="editDurationBadge" class="ml-2 bg-gray-700 text-xs text-gray-300 px-2 py-0.5 rounded hidden leading-none">00:00</span>
@@ -874,7 +912,7 @@
                   <input type="datetime-local" id="editScheduleEndTime" name="scheduleEndTime"
                     class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white [color-scheme:dark]">
                 </div>
-                <div>
+                <div class="scheduleOnlyField">
                   <label class="text-xs text-gray-400 block mb-1">Repeat</label>
                   <select id="editRepeatMode" name="repeatMode" class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white">
                     <option value="none" selected>Once</option>
@@ -1011,6 +1049,12 @@
                   </div>
 
                   <div>
+                    <label class="text-xs text-gray-400 block mb-1">Stream Name <span class="text-gray-600">(key stream)</span></label>
+                    <input type="text" id="editYtKeyStreamName" name="keyStreamName" class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white" placeholder="e.g. Rain ASMR Main">
+                    <p class="text-[11px] text-gray-500 mt-1">Same name as an existing stream? Its key stream (RTMP url/key) is reused. New name = a new key stream.</p>
+                  </div>
+
+                  <div>
                     <label class="text-xs text-gray-400 block mb-1">Description</label>
                     <textarea id="editYtDescription" name="ytDescription" rows="3" class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white resize-y min-h-[60px]" placeholder="Enter stream description..."></textarea>
                   </div>
@@ -1104,6 +1148,16 @@
                       <div class="absolute left-[2px] top-[2px] w-5 h-5 bg-white rounded-full transition-all peer-checked:translate-x-5"></div>
                     </label>
                   </div>
+
+                  <div class="h-[42px] flex items-center justify-between">
+                    <label class="text-sm text-gray-200 flex items-center gap-1"><i class="ti ti-infinity text-primary"></i>Live Nonstop</label>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                      <input type="checkbox" id="editYtNonstopMode" class="sr-only peer">
+                      <div class="w-11 h-6 bg-dark-900 border border-gray-600 rounded-full peer peer-checked:bg-primary peer-checked:border-primary"></div>
+                      <div class="absolute left-[2px] top-[2px] w-5 h-5 bg-white rounded-full transition-all peer-checked:translate-x-5"></div>
+                    </label>
+                  </div>
+                  <p id="editYtNonstopHint" class="hidden text-[11px] text-gray-500 -mt-2">Live Nonstop: loops forever, no end time, restarts itself if it drops. Turns Enable Schedule off.</p>
 
                   <div id="editYtAdPanelContainer"></div>
                   <div id="editYtLangPanelContainer"></div>
@@ -1675,6 +1729,7 @@
         const ytFormData = {
           videoId: ytVideoId,
           title: document.getElementById('ytStreamTitle').value,
+          keyStreamName: document.getElementById('ytKeyStreamName')?.value || '',
           description: document.getElementById('ytDescription').value,
           privacy: document.getElementById('ytPrivacy').value,
           category: document.getElementById('ytCategory').value,
@@ -1682,8 +1737,10 @@
           loopVideo: true,
           ytChannelId: document.getElementById('ytSelectedChannelId')?.value || ''
         };
-        
-        const enableSchedule = document.getElementById('ytEnableSchedule').checked;
+
+        const ytNonstop = document.getElementById('ytNonstopMode')?.checked || false;
+        ytFormData.nonstop = ytNonstop;
+        const enableSchedule = !ytNonstop && document.getElementById('ytEnableSchedule').checked;
         if (enableSchedule) {
           const scheduleStart = document.getElementById('ytScheduleStart').value;
           const scheduleEnd = document.getElementById('ytScheduleEnd').value;
@@ -1804,26 +1861,30 @@
         resolution: document.getElementById('currentResolution').textContent.split(' ')[0],
         useAdvancedSettings: !document.getElementById('advancedSettingsContent').classList.contains('hidden')
       };
-      const scheduleStartTime = document.getElementById('scheduleStartTime').value;
-      const scheduleEndTime = document.getElementById('scheduleEndTime').value;
-      if (scheduleStartTime && scheduleEndTime) {
-        const startDate = new Date(scheduleStartTime);
-        const endDate = new Date(scheduleEndTime);
-        if (endDate <= startDate) {
-          showToast('error', 'End stream must be after start stream');
+      const nonstopMode = document.getElementById('nonstopMode')?.checked || false;
+      formData.nonstop = nonstopMode;
+      if (!nonstopMode) {
+        const scheduleStartTime = document.getElementById('scheduleStartTime').value;
+        const scheduleEndTime = document.getElementById('scheduleEndTime').value;
+        if (scheduleStartTime && scheduleEndTime) {
+          const startDate = new Date(scheduleStartTime);
+          const endDate = new Date(scheduleEndTime);
+          if (endDate <= startDate) {
+            showToast('error', 'End stream must be after start stream');
+            return;
+          }
+        }
+        if (scheduleStartTime) {
+          formData.scheduleStartTime = scheduleStartTime;
+        }
+        if (scheduleEndTime) {
+          formData.scheduleEndTime = scheduleEndTime;
+        }
+        formData.repeatMode = document.getElementById('repeatMode')?.value || 'none';
+        if (formData.repeatMode !== 'none' && (!scheduleStartTime || !scheduleEndTime)) {
+          showToast('error', 'Repeat needs both a start and an end time');
           return;
         }
-      }
-      if (scheduleStartTime) {
-        formData.scheduleStartTime = scheduleStartTime;
-      }
-      if (scheduleEndTime) {
-        formData.scheduleEndTime = scheduleEndTime;
-      }
-      formData.repeatMode = document.getElementById('repeatMode')?.value || 'none';
-      if (formData.repeatMode !== 'none' && (!scheduleStartTime || !scheduleEndTime)) {
-        showToast('error', 'Repeat needs both a start and an end time');
-        return;
       }
       fetch('/api/streams', {
         method: 'POST',
@@ -2727,6 +2788,46 @@
       }
     });
 
+    /**
+     * "Live Nonstop" – the stream loops forever, so schedule/end/repeat don't apply.
+     * Wires a nonstop checkbox to hide/disable whichever schedule controls a form uses
+     * (a plain grid of fields for manual streams, or an Enable Schedule toggle + panel
+     * for YouTube streams).
+     */
+    function setupNonstopToggle({ nonstopId, hintId, scheduleGridId, scheduleToggleId, scheduleSettingsId }) {
+      const nonstopEl = document.getElementById(nonstopId);
+      if (!nonstopEl) return;
+      const hintEl = hintId ? document.getElementById(hintId) : null;
+      const gridEl = scheduleGridId ? document.getElementById(scheduleGridId) : null;
+      const scheduleToggleEl = scheduleToggleId ? document.getElementById(scheduleToggleId) : null;
+      const scheduleSettingsEl = scheduleSettingsId ? document.getElementById(scheduleSettingsId) : null;
+
+      function apply() {
+        const on = nonstopEl.checked;
+        if (hintEl) hintEl.classList.toggle('hidden', !on);
+        if (gridEl) {
+          gridEl.querySelectorAll('.scheduleOnlyField').forEach(el => el.classList.toggle('hidden', on));
+        }
+        if (scheduleToggleEl) {
+          scheduleToggleEl.disabled = on;
+          if (on && scheduleToggleEl.checked) {
+            scheduleToggleEl.checked = false;
+            scheduleToggleEl.dispatchEvent(new Event('change'));
+          } else if (scheduleSettingsEl) {
+            scheduleSettingsEl.classList.toggle('hidden', on || !scheduleToggleEl.checked);
+          }
+        }
+      }
+      nonstopEl.addEventListener('change', apply);
+      nonstopEl._applyNonstop = apply;
+      apply();
+    }
+
+    setupNonstopToggle({ nonstopId: 'nonstopMode', hintId: 'nonstopHint', scheduleGridId: 'scheduleFieldsGrid' });
+    setupNonstopToggle({ nonstopId: 'editNonstopMode', hintId: 'editNonstopHint', scheduleGridId: 'editScheduleFieldsGrid' });
+    setupNonstopToggle({ nonstopId: 'ytNonstopMode', hintId: 'ytNonstopHint', scheduleToggleId: 'ytEnableSchedule', scheduleSettingsId: 'ytScheduleSettings' });
+    setupNonstopToggle({ nonstopId: 'editYtNonstopMode', hintId: 'editYtNonstopHint', scheduleToggleId: 'editYtEnableSchedule', scheduleSettingsId: 'editYtScheduleSettings' });
+
     document.getElementById('ytThumbnail')?.addEventListener('change', function(e) {
       const file = e.target.files[0];
       if (file) {
@@ -3433,6 +3534,18 @@
       } else {
         document.getElementById('editScheduleEndTime').value = '';
       }
+      const editYtKeyStreamNameEl = document.getElementById('editYtKeyStreamName');
+      if (editYtKeyStreamNameEl) editYtKeyStreamNameEl.value = isYoutubeStream ? (stream.key_stream_name || '') : '';
+      const editNonstopEl = document.getElementById('editNonstopMode');
+      if (editNonstopEl) {
+        editNonstopEl.checked = !!stream.nonstop;
+        if (editNonstopEl._applyNonstop) editNonstopEl._applyNonstop();
+      }
+      const editYtNonstopEl = document.getElementById('editYtNonstopMode');
+      if (editYtNonstopEl) {
+        editYtNonstopEl.checked = !!stream.nonstop;
+        if (editYtNonstopEl._applyNonstop) editYtNonstopEl._applyNonstop();
+      }
       const advancedSettingsContent = document.getElementById('editAdvancedSettingsContent');
       const advancedSettingsCheckbox = document.getElementById('editAdvancedSettingsCheckbox');
       if (stream.use_advanced_settings) {
@@ -3763,6 +3876,7 @@
               streamMode: 'youtube',
               videoId: ytVideoId,
               title: document.getElementById('editYtStreamTitle').value,
+              keyStreamName: document.getElementById('editYtKeyStreamName')?.value || '',
               description: document.getElementById('editYtDescription').value,
               privacy: document.getElementById('editYtPrivacy').value,
               category: document.getElementById('editYtCategory').value,
@@ -3776,8 +3890,10 @@
             ytFormDataObj.ytAdSettings = JSON.stringify(editAdSettings);
             ytFormDataObj.ytLocalizations = JSON.stringify(window.StreamodLang ? StreamodLang.read('editYt') : []);
             ytFormDataObj.ytSourceLanguage = window.StreamodLang ? StreamodLang.readSource('editYt') : 'en';
-            
-            const enableSchedule = document.getElementById('editYtEnableSchedule').checked;
+
+            const editYtNonstop = document.getElementById('editYtNonstopMode')?.checked || false;
+            ytFormDataObj.nonstop = editYtNonstop;
+            const enableSchedule = !editYtNonstop && document.getElementById('editYtEnableSchedule').checked;
             if (enableSchedule) {
               ytFormDataObj.scheduleStartTime = document.getElementById('editYtScheduleStart').value;
               ytFormDataObj.scheduleEndTime = document.getElementById('editYtScheduleEnd').value;
@@ -3877,22 +3993,30 @@
             resolution: document.getElementById('editCurrentResolution').textContent,
             useAdvancedSettings: !document.getElementById('editAdvancedSettingsContent').classList.contains('hidden')
           };
-          const scheduleStartTime = document.getElementById('editScheduleStartTime').value;
-          const scheduleEndTime = document.getElementById('editScheduleEndTime').value;
-          if (scheduleStartTime && scheduleEndTime) {
-            const startDate = new Date(scheduleStartTime);
-            const endDate = new Date(scheduleEndTime);
-            if (endDate <= startDate) {
-              showToast('error', 'End stream must be after start stream');
+          const editNonstop = document.getElementById('editNonstopMode')?.checked || false;
+          formData.nonstop = editNonstop;
+          if (editNonstop) {
+            formData.scheduleStartTime = '';
+            formData.scheduleEndTime = '';
+            formData.repeatMode = 'none';
+          } else {
+            const scheduleStartTime = document.getElementById('editScheduleStartTime').value;
+            const scheduleEndTime = document.getElementById('editScheduleEndTime').value;
+            if (scheduleStartTime && scheduleEndTime) {
+              const startDate = new Date(scheduleStartTime);
+              const endDate = new Date(scheduleEndTime);
+              if (endDate <= startDate) {
+                showToast('error', 'End stream must be after start stream');
+                return;
+              }
+            }
+            formData.scheduleStartTime = scheduleStartTime || '';
+            formData.scheduleEndTime = scheduleEndTime || '';
+            formData.repeatMode = document.getElementById('editRepeatMode')?.value || 'none';
+            if (formData.repeatMode !== 'none' && (!scheduleStartTime || !scheduleEndTime)) {
+              showToast('error', 'Repeat needs both a start and an end time');
               return;
             }
-          }
-          formData.scheduleStartTime = scheduleStartTime || '';
-          formData.scheduleEndTime = scheduleEndTime || '';
-          formData.repeatMode = document.getElementById('editRepeatMode')?.value || 'none';
-          if (formData.repeatMode !== 'none' && (!scheduleStartTime || !scheduleEndTime)) {
-            showToast('error', 'Repeat needs both a start and an end time');
-            return;
           }
           fetch(`/api/streams/${streamId}`, {
             method: 'PUT',

@@ -272,6 +272,24 @@ function createTables() {
         FOREIGN KEY (video_id) REFERENCES videos(id)
       )`);
 
+      // "Key streams" – named, reusable YouTube liveStream (RTMP ingestion) resources.
+      // A single stream's "Stream Name" is looked up here: if a key stream with that
+      // name already exists for the user+channel it is reused (same RTMP url/key),
+      // otherwise a new one is created and remembered under this name.
+      db.run(`CREATE TABLE IF NOT EXISTS stream_keys (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        youtube_channel_id TEXT,
+        name TEXT NOT NULL,
+        youtube_stream_id TEXT,
+        youtube_stream_key TEXT,
+        youtube_rtmp_url TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+      )`);
+      db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_stream_keys_name ON stream_keys(user_id, youtube_channel_id, name)`);
+
       // Add start_time, end_time, and repeat_mode columns to stream_rotations table
       db.run(`ALTER TABLE stream_rotations ADD COLUMN start_time TEXT`, (err) => {
         if (err && !err.message.includes('duplicate column name')) {
@@ -403,7 +421,12 @@ function createTables() {
         // --- Recurring schedule for single streams (Repeat: none | daily | weekly)
         ['streams', 'repeat_mode', "TEXT DEFAULT 'none'"],
         ['streams', 'repeat_anchor_start', 'TEXT'],
-        ['streams', 'repeat_anchor_end', 'TEXT']
+        ['streams', 'repeat_anchor_end', 'TEXT'],
+        // --- Named "key stream" (persistent YouTube RTMP ingestion key), reused
+        // across edits/re-broadcasts the same way a rotation's name identifies its
+        // key stream, plus the "Live Nonstop" flag (loop forever, no schedule).
+        ['streams', 'key_stream_name', 'TEXT'],
+        ['streams', 'nonstop', 'INTEGER DEFAULT 0']
       ];
 
       extraColumns.forEach(([table, column, type]) => {

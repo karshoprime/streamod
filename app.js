@@ -74,6 +74,37 @@ function normalizeRepeatMode(value) {
 }
 
 /**
+ * "Stream Name" – identifies a reusable key stream (YouTube RTMP ingestion key),
+ * mirroring how a rotation's name doubles as its key stream's name. Blank means
+ * "no name" (falls back to the plain title, no reuse across streams).
+ */
+function parseKeyStreamName(value) {
+  const trimmed = String(value || '').trim();
+  return trimmed ? trimmed.slice(0, 150) : null;
+}
+
+function parseBoolField(value) {
+  return value === 'true' || value === true || value === '1' || value === 1 || value === 'on';
+}
+
+/**
+ * "Live Nonstop": the stream loops forever with no schedule/duration/repeat.
+ * Forces schedule/end/duration/repeat off so the two features never conflict.
+ */
+function applyNonstopToUpdate(req, updateData) {
+  if (req.body.nonstop === undefined) return;
+  const nonstop = parseBoolField(req.body.nonstop);
+  updateData.nonstop = nonstop;
+  if (nonstop) {
+    updateData.end_time = null;
+    updateData.duration = null;
+    updateData.repeat_mode = 'none';
+    updateData.repeat_anchor_start = null;
+    updateData.repeat_anchor_end = null;
+  }
+}
+
+/**
  * Accepts a JSON array string, an array, or a comma separated list of language codes.
  */
 function parseLanguageInput(value) {
@@ -3573,7 +3604,9 @@ app.post('/api/streams', isAuthenticated, [
       orientation: req.body.orientation || 'horizontal',
       loop_video: req.body.loopVideo === 'true' || req.body.loopVideo === true,
       use_advanced_settings: req.body.useAdvancedSettings === 'true' || req.body.useAdvancedSettings === true,
-      user_id: req.session.userId
+      user_id: req.session.userId,
+      key_stream_name: parseKeyStreamName(req.body.keyStreamName),
+      nonstop: parseBoolField(req.body.nonstop)
     };
     const serverTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     
@@ -3585,41 +3618,46 @@ app.post('/api/streams', isAuthenticated, [
       return new Date(year, month - 1, day, hours, minutes);
     }
     
-    if (req.body.scheduleStartTime) {
-      const scheduleStartDate = parseLocalDateTime(req.body.scheduleStartTime);
-      streamData.schedule_time = scheduleStartDate.toISOString();
-      streamData.status = 'scheduled';
-      
-      if (req.body.scheduleEndTime) {
-        const scheduleEndDate = parseLocalDateTime(req.body.scheduleEndTime);
-        
-        if (scheduleEndDate <= scheduleStartDate) {
-          return res.status(400).json({ 
-            success: false, 
-            error: 'End time must be after start time' 
-          });
-        }
-        
-        streamData.end_time = scheduleEndDate.toISOString();
-        const durationMs = scheduleEndDate - scheduleStartDate;
-        const durationMinutes = Math.round(durationMs / (1000 * 60));
-        streamData.duration = durationMinutes > 0 ? durationMinutes : null;
-      }
-    } else if (req.body.scheduleEndTime) {
-      const scheduleEndDate = parseLocalDateTime(req.body.scheduleEndTime);
-      streamData.end_time = scheduleEndDate.toISOString();
-    }
-    
-    if (!streamData.status) {
+    if (streamData.nonstop) {
+      // Live Nonstop loops forever – schedule/end/duration/repeat don't apply.
       streamData.status = 'offline';
-    }
+    } else {
+      if (req.body.scheduleStartTime) {
+        const scheduleStartDate = parseLocalDateTime(req.body.scheduleStartTime);
+        streamData.schedule_time = scheduleStartDate.toISOString();
+        streamData.status = 'scheduled';
 
-    // Recurring schedule (Repeat: daily / weekly) – needs both start and end
-    const repeatMode = normalizeRepeatMode(req.body.repeatMode);
-    if (repeatMode !== 'none' && streamData.schedule_time && streamData.end_time) {
-      streamData.repeat_mode = repeatMode;
-      streamData.repeat_anchor_start = streamData.schedule_time;
-      streamData.repeat_anchor_end = streamData.end_time;
+        if (req.body.scheduleEndTime) {
+          const scheduleEndDate = parseLocalDateTime(req.body.scheduleEndTime);
+
+          if (scheduleEndDate <= scheduleStartDate) {
+            return res.status(400).json({
+              success: false,
+              error: 'End time must be after start time'
+            });
+          }
+
+          streamData.end_time = scheduleEndDate.toISOString();
+          const durationMs = scheduleEndDate - scheduleStartDate;
+          const durationMinutes = Math.round(durationMs / (1000 * 60));
+          streamData.duration = durationMinutes > 0 ? durationMinutes : null;
+        }
+      } else if (req.body.scheduleEndTime) {
+        const scheduleEndDate = parseLocalDateTime(req.body.scheduleEndTime);
+        streamData.end_time = scheduleEndDate.toISOString();
+      }
+
+      if (!streamData.status) {
+        streamData.status = 'offline';
+      }
+
+      // Recurring schedule (Repeat: daily / weekly) – needs both start and end
+      const repeatMode = normalizeRepeatMode(req.body.repeatMode);
+      if (repeatMode !== 'none' && streamData.schedule_time && streamData.end_time) {
+        streamData.repeat_mode = repeatMode;
+        streamData.repeat_anchor_start = streamData.schedule_time;
+        streamData.repeat_anchor_end = streamData.end_time;
+      }
     }
 
     const stream = await Stream.create(streamData);
@@ -3641,7 +3679,7 @@ app.post('/api/streams/youtube', isAuthenticated, uploadThumbnail.single('thumbn
         error: 'YouTube API credentials not configured.' 
       });
     }
-    const { videoId, title, description, privacy, category, tags, loopVideo, scheduleStartTime, scheduleEndTime, repeat, ytChannelId, ytMonetization, ytAdSettings, ytLocalizations, ytSourceLanguage } = req.body;
+    const { videoId, title, description, privacy, category, tags, loopVideo, scheduleStartTime, scheduleEndTime, repeat, ytChannelId, ytMonetization, ytAdSettings, ytLocalizations, ytSourceLanguage, keyStreamName, nonstop } = req.body;
     const { normalizeAdSettings } = require('./services/adSettings');
     const { sanitizeLanguageList, isValidLanguage } = require('./config/youtubeLanguages');
 
@@ -3716,35 +3754,42 @@ app.post('/api/streams/youtube', isAuthenticated, uploadThumbnail.single('thumbn
       youtube_monetization: adSettings.enabled,
       youtube_ad_settings: JSON.stringify(adSettings),
       youtube_localizations: JSON.stringify(localizations),
-      youtube_source_language: sourceLanguage
+      youtube_source_language: sourceLanguage,
+      key_stream_name: parseKeyStreamName(keyStreamName),
+      nonstop: parseBoolField(nonstop)
     };
-    
-    if (scheduleStartTime) {
-      const [datePart, timePart] = scheduleStartTime.split('T');
-      const [year, month, day] = datePart.split('-').map(Number);
-      const [hours, minutes] = timePart.split(':').map(Number);
-      const scheduleDate = new Date(year, month - 1, day, hours, minutes);
-      streamData.schedule_time = scheduleDate.toISOString();
-      streamData.status = 'scheduled';
-    } else {
+
+    if (streamData.nonstop) {
+      // Live Nonstop loops forever – schedule/end/duration/repeat don't apply.
       streamData.status = 'offline';
-    }
-    
-    if (scheduleEndTime) {
-      const [datePart, timePart] = scheduleEndTime.split('T');
-      const [year, month, day] = datePart.split('-').map(Number);
-      const [hours, minutes] = timePart.split(':').map(Number);
-      const endDate = new Date(year, month - 1, day, hours, minutes);
-      streamData.end_time = endDate.toISOString();
+    } else {
+      if (scheduleStartTime) {
+        const [datePart, timePart] = scheduleStartTime.split('T');
+        const [year, month, day] = datePart.split('-').map(Number);
+        const [hours, minutes] = timePart.split(':').map(Number);
+        const scheduleDate = new Date(year, month - 1, day, hours, minutes);
+        streamData.schedule_time = scheduleDate.toISOString();
+        streamData.status = 'scheduled';
+      } else {
+        streamData.status = 'offline';
+      }
+
+      if (scheduleEndTime) {
+        const [datePart, timePart] = scheduleEndTime.split('T');
+        const [year, month, day] = datePart.split('-').map(Number);
+        const [hours, minutes] = timePart.split(':').map(Number);
+        const endDate = new Date(year, month - 1, day, hours, minutes);
+        streamData.end_time = endDate.toISOString();
+      }
+
+      const repeatMode = normalizeRepeatMode(req.body.repeatMode);
+      if (repeatMode !== 'none' && streamData.schedule_time && streamData.end_time) {
+        streamData.repeat_mode = repeatMode;
+        streamData.repeat_anchor_start = streamData.schedule_time;
+        streamData.repeat_anchor_end = streamData.end_time;
+      }
     }
 
-    const repeatMode = normalizeRepeatMode(req.body.repeatMode);
-    if (repeatMode !== 'none' && streamData.schedule_time && streamData.end_time) {
-      streamData.repeat_mode = repeatMode;
-      streamData.repeat_anchor_start = streamData.schedule_time;
-      streamData.repeat_anchor_end = streamData.end_time;
-    }
-    
     const stream = await Stream.create(streamData);
     
     res.json({ 
@@ -3840,6 +3885,9 @@ app.put('/api/streams/:id', isAuthenticated, uploadThumbnail.single('thumbnail')
       if (req.body.loopVideo !== undefined) {
         updateData.loop_video = req.body.loopVideo === 'true' || req.body.loopVideo === true;
       }
+      if (req.body.keyStreamName !== undefined) {
+        updateData.key_stream_name = parseKeyStreamName(req.body.keyStreamName);
+      }
       const { normalizeAdSettings } = require('./services/adSettings');
       const { sanitizeLanguageList, isValidLanguage } = require('./config/youtubeLanguages');
 
@@ -3863,11 +3911,15 @@ app.put('/api/streams/:id', isAuthenticated, uploadThumbnail.single('thumbnail')
         updateData.youtube_source_language = isValidLanguage(req.body.ytSourceLanguage) ? req.body.ytSourceLanguage : null;
       }
       
-      if (req.body.scheduleStartTime) {
+      if (req.body.nonstop !== undefined && parseBoolField(req.body.nonstop)) {
+        updateData.schedule_time = null;
+        updateData.end_time = null;
+        updateData.duration = null;
+      } else if (req.body.scheduleStartTime) {
         const scheduleStartDate = parseScheduleDateTime(req.body.scheduleStartTime);
         updateData.schedule_time = scheduleStartDate.toISOString();
         updateData.status = 'scheduled';
-        
+
         if (req.body.scheduleEndTime) {
           const scheduleEndDate = parseScheduleDateTime(req.body.scheduleEndTime);
           updateData.end_time = scheduleEndDate.toISOString();
@@ -3883,7 +3935,7 @@ app.put('/api/streams/:id', isAuthenticated, uploadThumbnail.single('thumbnail')
           updateData.end_time = scheduleEndDate.toISOString();
         }
       }
-      
+
       if (req.file) {
         try {
           const originalFilename = req.file.filename;
@@ -4015,6 +4067,7 @@ app.put('/api/streams/:id', isAuthenticated, uploadThumbnail.single('thumbnail')
       }
       
       applyRepeatToUpdate(req, stream, updateData);
+      applyNonstopToUpdate(req, updateData);
       await Stream.update(req.params.id, updateData);
       return res.json({ success: true, message: 'Stream updated successfully' });
     }
@@ -4064,6 +4117,9 @@ app.put('/api/streams/:id', isAuthenticated, uploadThumbnail.single('thumbnail')
     if (req.body.useAdvancedSettings !== undefined) {
       updateData.use_advanced_settings = req.body.useAdvancedSettings === 'true' || req.body.useAdvancedSettings === true;
     }
+    if (req.body.keyStreamName !== undefined) {
+      updateData.key_stream_name = parseKeyStreamName(req.body.keyStreamName);
+    }
     const serverTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     
     function parseLocalDateTime(dateTimeString) {
@@ -4074,11 +4130,15 @@ app.put('/api/streams/:id', isAuthenticated, uploadThumbnail.single('thumbnail')
       return new Date(year, month - 1, day, hours, minutes);
     }
     
-    if (req.body.scheduleStartTime) {
+    if (req.body.nonstop !== undefined && parseBoolField(req.body.nonstop)) {
+      updateData.schedule_time = null;
+      updateData.end_time = null;
+      updateData.duration = null;
+    } else if (req.body.scheduleStartTime) {
       const scheduleStartDate = parseLocalDateTime(req.body.scheduleStartTime);
       updateData.schedule_time = scheduleStartDate.toISOString();
       updateData.status = 'scheduled';
-      
+
       if (req.body.scheduleEndTime) {
         const scheduleEndDate = parseLocalDateTime(req.body.scheduleEndTime);
         
@@ -4117,6 +4177,7 @@ app.put('/api/streams/:id', isAuthenticated, uploadThumbnail.single('thumbnail')
     }
     
     applyRepeatToUpdate(req, stream, updateData);
+    applyNonstopToUpdate(req, updateData);
     const updatedStream = await Stream.update(req.params.id, updateData);
     res.json({ success: true, stream: updatedStream });
   } catch (error) {

@@ -3,6 +3,7 @@ const { encrypt, decrypt } = require('../utils/encryption');
 const User = require('../models/User');
 const Stream = require('../models/Stream');
 const YoutubeChannel = require('../models/YoutubeChannel');
+const StreamKey = require('../models/StreamKey');
 const fs = require('fs');
 const path = require('path');
 const {
@@ -290,6 +291,94 @@ async function applyBroadcastLocalizations(youtube, videoId, { user, title, desc
   return localizations;
 }
 
+/**
+ * Resolves the YouTube liveStream (RTMP ingestion resource) to bind a broadcast to.
+ * Mirrors what rotations already do (reuse the same ingestion key across runs), but
+ * keyed by a user-chosen "Stream Name" instead of the rotation's own name: if a key
+ * stream with that name exists it is reused as-is (same RTMP url/key); otherwise a
+ * new one is created and remembered under that name for next time.
+ */
+async function resolveKeyStream(youtube, { userId, channelId, name, fallbackTitle }) {
+  const trimmedName = (name || '').trim();
+
+  if (trimmedName) {
+    const existing = await StreamKey.findByName(userId, channelId, trimmedName);
+    if (existing && existing.youtube_stream_id) {
+      try {
+        const response = await youtube.liveStreams.list({
+          part: 'id,snippet,cdn,status',
+          id: existing.youtube_stream_id
+        });
+        const liveStream = response.data.items?.[0];
+        if (liveStream && liveStream.cdn?.ingestionInfo) {
+          console.log(`[YouTubeService] Reusing key stream "${trimmedName}" (${liveStream.id})`);
+          return {
+            streamId: liveStream.id,
+            streamKey: liveStream.cdn.ingestionInfo.streamName,
+            rtmpUrl: liveStream.cdn.ingestionInfo.ingestionAddress,
+            reused: true
+          };
+        }
+      } catch (err) {
+        console.warn(`[YouTubeService] Saved key stream "${trimmedName}" is no longer valid, creating a new one: ${err.message}`);
+      }
+    }
+  }
+
+  const streamResponse = await youtube.liveStreams.insert({
+    part: 'snippet,cdn,contentDetails,status',
+    requestBody: {
+      snippet: {
+        title: trimmedName || `${fallbackTitle} - Stream`
+      },
+      cdn: {
+        frameRate: '30fps',
+        ingestionType: 'rtmp',
+        resolution: '1080p'
+      },
+      contentDetails: {
+        isReusable: false
+      }
+    }
+  });
+
+  const liveStream = streamResponse.data;
+  console.log(`[YouTubeService] Created live stream: ${liveStream.id}`);
+
+  const result = {
+    streamId: liveStream.id,
+    streamKey: liveStream.cdn.ingestionInfo.streamName,
+    rtmpUrl: liveStream.cdn.ingestionInfo.ingestionAddress,
+    reused: false
+  };
+
+  if (trimmedName) {
+    try {
+      const existing = await StreamKey.findByName(userId, channelId, trimmedName);
+      if (existing) {
+        await StreamKey.update(existing.id, {
+          youtubeStreamId: result.streamId,
+          youtubeStreamKey: result.streamKey,
+          youtubeRtmpUrl: result.rtmpUrl
+        });
+      } else {
+        await StreamKey.create({
+          userId,
+          channelId,
+          name: trimmedName,
+          youtubeStreamId: result.streamId,
+          youtubeStreamKey: result.streamKey,
+          youtubeRtmpUrl: result.rtmpUrl
+        });
+      }
+    } catch (err) {
+      console.warn(`[YouTubeService] Could not save key stream "${trimmedName}": ${err.message}`);
+    }
+  }
+
+  return result;
+}
+
 async function createYouTubeBroadcast(streamId, baseUrl) {
   try {
     return await createYouTubeBroadcastInner(streamId, baseUrl);
@@ -495,38 +584,25 @@ async function createYouTubeBroadcastInner(streamId, baseUrl) {
     }
   }
 
-  const streamResponse = await youtube.liveStreams.insert({
-    part: 'snippet,cdn,contentDetails,status',
-    requestBody: {
-      snippet: {
-        title: `${stream.title} - Stream`
-      },
-      cdn: {
-        frameRate: '30fps',
-        ingestionType: 'rtmp',
-        resolution: '1080p'
-      },
-      contentDetails: {
-        isReusable: false
-      }
-    }
+  const keyStream = await resolveKeyStream(youtube, {
+    userId: stream.user_id,
+    channelId: stream.youtube_channel_id,
+    name: stream.key_stream_name,
+    fallbackTitle: stream.title
   });
-
-  const liveStream = streamResponse.data;
-  console.log(`[YouTubeService] Created live stream: ${liveStream.id}`);
 
   await youtube.liveBroadcasts.bind({
     part: 'id,contentDetails',
     id: broadcast.id,
-    streamId: liveStream.id
+    streamId: keyStream.streamId
   });
 
-  const rtmpUrl = liveStream.cdn.ingestionInfo.ingestionAddress;
-  const streamKey = liveStream.cdn.ingestionInfo.streamName;
+  const rtmpUrl = keyStream.rtmpUrl;
+  const streamKey = keyStream.streamKey;
 
   await Stream.update(streamId, {
     youtube_broadcast_id: broadcast.id,
-    youtube_stream_id: liveStream.id,
+    youtube_stream_id: keyStream.streamId,
     rtmp_url: rtmpUrl,
     stream_key: streamKey
   });

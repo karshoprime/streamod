@@ -535,14 +535,20 @@ async function startStream(streamId, isRetry = false, baseUrl = null) {
 
       if (shouldRetry && currentStream && currentStream.status !== 'offline') {
         const retryCount = streamRetryCount.get(streamId) || 0;
+        const isNonstop = !!currentStream.nonstop;
 
-        if (retryCount < MAX_RETRY_ATTEMPTS) {
+        if (isNonstop || retryCount < MAX_RETRY_ATTEMPTS) {
+          // Live Nonstop never gives up – keep the retry count from climbing forever
+          // (the delay is capped anyway) by wrapping it back once it's clearly settled.
+          const effectiveRetryCount = isNonstop ? retryCount % MAX_RETRY_ATTEMPTS : retryCount;
           streamRetryCount.set(streamId, retryCount + 1);
-          const delay = getRetryDelay(retryCount);
+          const delay = getRetryDelay(effectiveRetryCount);
 
           addStreamLog(streamId, `Retry #${retryCount + 1} in ${Math.round(delay / 1000)}s`);
           notificationService.notify('stream_retry', {
-            title: `FFmpeg crashed – retry #${retryCount + 1}/${MAX_RETRY_ATTEMPTS}`,
+            title: isNonstop
+              ? `Live Nonstop – retry #${retryCount + 1}`
+              : `FFmpeg crashed – retry #${retryCount + 1}/${MAX_RETRY_ATTEMPTS}`,
             message: `Exit code ${code}, signal ${signal}. Restarting in ${Math.round(delay / 1000)}s.`,
             streamId, streamTitle: currentStream.title, key: `${streamId}:retry`
           });
@@ -753,7 +759,7 @@ async function syncStreamStatuses() {
 
       if (!isActive) {
         const retryCount = streamRetryCount.get(stream.id);
-        if (retryCount !== undefined && retryCount < MAX_RETRY_ATTEMPTS) {
+        if (retryCount !== undefined && (stream.nonstop || retryCount < MAX_RETRY_ATTEMPTS)) {
           continue;
         }
 
