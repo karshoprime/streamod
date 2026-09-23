@@ -187,8 +187,24 @@
     </div>
     <div id="streams-pagination" class="mt-6 hidden">
       <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
-        <p id="pagination-info" class="text-sm text-gray-400"></p>
+        <div class="flex items-center gap-3">
+          <button type="button" id="back-to-overview-btn" onclick="backToCompactView()"
+            class="hidden text-sm text-primary hover:underline items-center gap-1">
+            <i class="ti ti-arrow-back-up"></i> Overview
+          </button>
+          <p id="pagination-info" class="text-sm text-gray-400"></p>
+        </div>
         <div id="pagination-controls" class="flex items-center gap-2"></div>
+      </div>
+    </div>
+    <div id="compact-streams-footer" class="mt-6 hidden">
+      <div class="flex flex-col sm:flex-row items-center justify-between gap-3">
+        <p id="compact-streams-info" class="text-sm text-gray-400"></p>
+        <button type="button" id="compact-streams-toggle"
+          class="text-sm text-primary hover:underline flex items-center gap-1">
+          <i class="ti ti-chevron-down"></i>
+          <span id="compact-streams-toggle-label">Show all offline streams</span>
+        </button>
       </div>
     </div>
   </div>
@@ -1350,7 +1366,8 @@
   </style>
   <script>
     const initialStreamsData = <%- typeof initialStreams !== 'undefined' ? initialStreams : '[]' %>;
-    const initialPaginationData = <%- typeof initialPagination !== 'undefined' ? initialPagination : '{"page":1,"limit":10,"totalCount":0,"totalPages":0}' %>;
+    const initialOfflineTotalCount = <%- typeof initialOfflineTotalCount !== 'undefined' ? initialOfflineTotalCount : 0 %>;
+    const initialOfflineShown = <%- typeof initialOfflineShown !== 'undefined' ? initialOfflineShown : 0 %>;
     let initialDataUsed = false;
 
     function showToast(type, message) {
@@ -1913,6 +1930,44 @@
     let currentLimit = 10;
     let currentSearch = '';
     let totalStreamsCount = 0;
+    // Home view is "flexible": every live/scheduled stream, plus only the most
+    // recent COMPACT_OFFLINE_LIMIT offline ones. Searching or clicking "show all"
+    // switches to the classic full paginated list.
+    let compactMode = true;
+    let offlineTotalCount = initialOfflineTotalCount || 0;
+    let offlineShownCount = initialOfflineShown || 0;
+
+    function backToCompactView() {
+      compactMode = true;
+      fetchStreams(1, currentLimit, '');
+    }
+
+    function updateCompactFooter() {
+      const footer = document.getElementById('compact-streams-footer');
+      const info = document.getElementById('compact-streams-info');
+      const toggleLabel = document.getElementById('compact-streams-toggle-label');
+      const toggleBtn = document.getElementById('compact-streams-toggle');
+      if (!footer) return;
+      const hiddenCount = Math.max(0, offlineTotalCount - offlineShownCount);
+      if (hiddenCount <= 0) {
+        footer.classList.add('hidden');
+        return;
+      }
+      footer.classList.remove('hidden');
+      if (info) info.textContent = `Showing all live/scheduled streams + latest ${offlineShownCount} of ${offlineTotalCount} offline streams`;
+      if (toggleLabel) toggleLabel.textContent = `Show all ${offlineTotalCount} offline streams`;
+      if (toggleBtn) {
+        toggleBtn.onclick = function () {
+          compactMode = false;
+          fetchStreams(1, 25, '');
+        };
+      }
+    }
+
+    function hideCompactFooter() {
+      const footer = document.getElementById('compact-streams-footer');
+      if (footer) footer.classList.add('hidden');
+    }
 
     function refreshStreamsView(page = currentPage, search = currentSearch) {
       currentPage = page;
@@ -2333,6 +2388,7 @@
       if (!streams || streams.length === 0) {
         showEmptyState();
         hidePagination();
+        hideCompactFooter();
         return;
       }
       displayMobileStreams(streams);
@@ -2343,33 +2399,48 @@
       currentPage = page;
       currentLimit = limit;
       currentSearch = search;
-      
-      const params = new URLSearchParams({
-        page: page,
-        limit: limit
-      });
-      if (search) params.append('search', search);
-      
+
+      const useCompact = compactMode && !search;
+      const params = new URLSearchParams();
+      if (useCompact) {
+        params.set('compact', '1');
+      } else {
+        params.set('page', page);
+        params.set('limit', limit);
+        if (search) params.append('search', search);
+      }
+
       fetch(`/api/streams?${params.toString()}`)
         .then(response => response.json())
         .then(data => {
           if (data.success) {
             displayStreams(data.streams);
-            if (data.pagination) {
+            if (data.compact) {
+              offlineTotalCount = data.offlineTotalCount || 0;
+              offlineShownCount = data.offlineShown || 0;
+              hidePagination();
+              updateCompactFooter();
+            } else if (data.pagination) {
               totalStreamsCount = data.pagination.totalCount;
               updatePagination(data.pagination);
+              hideCompactFooter();
+            } else {
+              hidePagination();
+              hideCompactFooter();
             }
             updateStreamCountersFromAPI();
           } else {
             console.error('Error fetching streams:', data.error);
             showEmptyState();
             hidePagination();
+            hideCompactFooter();
           }
         })
         .catch(error => {
           console.error('Error fetching streams:', error);
           showEmptyState();
           hidePagination();
+          hideCompactFooter();
         });
     }
     
@@ -2388,10 +2459,8 @@
       if (initialStreamsData && initialStreamsData.length >= 0 && !initialDataUsed) {
         initialDataUsed = true;
         displayStreams(initialStreamsData);
-        if (initialPaginationData) {
-          totalStreamsCount = initialPaginationData.totalCount;
-          updatePagination(initialPaginationData);
-        }
+        hidePagination();
+        updateCompactFooter();
         updateStreamCounters(initialStreamsData);
       } else {
         fetchStreams(1, 10, '');
@@ -2399,9 +2468,8 @@
       fetchServerTimeSync().then(() => {
         if (initialDataUsed) {
           displayStreams(initialStreamsData);
-          if (initialPaginationData) {
-            updatePagination(initialPaginationData);
-          }
+          hidePagination();
+          updateCompactFooter();
         }
       });
       startCountdowns();
@@ -4344,7 +4412,13 @@
       }
       
       paginationContainer.classList.remove('hidden');
-      
+
+      const backBtn = document.getElementById('back-to-overview-btn');
+      if (backBtn) {
+        backBtn.classList.toggle('hidden', compactMode);
+        backBtn.classList.toggle('flex', !compactMode);
+      }
+
       const startItem = ((pagination.page - 1) * pagination.limit) + 1;
       const endItem = Math.min(pagination.page * pagination.limit, pagination.totalCount);
       paginationInfo.textContent = `Showing ${startItem}-${endItem} of ${pagination.totalCount} streams`;

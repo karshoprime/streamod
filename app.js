@@ -773,12 +773,8 @@ app.get('/dashboard', isAuthenticated, async (req, res) => {
     const isYoutubeConnected = youtubeChannels.length > 0;
     const defaultChannel = youtubeChannels.find(c => c.is_default) || youtubeChannels[0];
     
-    const initialStreamsData = await Stream.findAllPaginated(req.session.userId, {
-      page: 1,
-      limit: 10,
-      search: ''
-    });
-    
+    const initialStreamsData = await Stream.findLivePlusOffline(req.session.userId, COMPACT_OFFLINE_LIMIT);
+
     res.render('dashboard', {
       title: 'Dashboard',
       active: 'dashboard',
@@ -790,7 +786,8 @@ app.get('/dashboard', isAuthenticated, async (req, res) => {
       youtubeSubscriberCount: defaultChannel?.subscriber_count || '0',
       hasYoutubeCredentials: hasYoutubeCredentials,
       initialStreams: JSON.stringify(initialStreamsData.streams),
-      initialPagination: JSON.stringify(initialStreamsData.pagination)
+      initialOfflineTotalCount: initialStreamsData.offlineTotalCount,
+      initialOfflineShown: initialStreamsData.offlineShown
     });
   } catch (error) {
     console.error('Dashboard error:', error);
@@ -3533,13 +3530,20 @@ app.get('/api/stream/content', isAuthenticated, async (req, res) => {
   }
 });
 
+const COMPACT_OFFLINE_LIMIT = 5;
 app.get('/api/streams', isAuthenticated, async (req, res) => {
   try {
     const filter = req.query.filter;
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const search = req.query.search || '';
-    if (req.query.page || req.query.limit) {
+    const compact = (req.query.compact === '1' || req.query.compact === 'true') && !filter && !search;
+    if (compact) {
+      // Home view: every live/scheduled stream, plus only the latest N offline ones,
+      // so an account with a long history of past streams doesn't bury what's active.
+      const result = await Stream.findLivePlusOffline(req.session.userId, COMPACT_OFFLINE_LIMIT);
+      res.json({ success: true, compact: true, ...result });
+    } else if (req.query.page || req.query.limit) {
       const result = await Stream.findAllPaginated(req.session.userId, {
         page,
         limit,

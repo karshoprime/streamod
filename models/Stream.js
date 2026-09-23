@@ -168,6 +168,79 @@ class Stream {
       });
     });
   }
+  /**
+   * "At a glance" home view: every live/scheduled stream (never capped – those are
+   * the ones that matter right now), plus only the most recent `offlineLimit`
+   * offline ones, so an account with a long streaming history doesn't bury what's
+   * active under old, finished streams. Also returns how many offline streams
+   * exist in total, so the UI can offer "show all".
+   */
+  static findLivePlusOffline(userId, offlineLimit = 5) {
+    const baseSelect = `
+      SELECT s.*,
+             v.title AS video_title,
+             v.filepath AS video_filepath,
+             v.thumbnail_path AS video_thumbnail,
+             v.duration AS video_duration,
+             v.resolution AS video_resolution,
+             v.bitrate AS video_bitrate,
+             v.fps AS video_fps,
+             p.name AS playlist_name,
+             CASE
+               WHEN p.id IS NOT NULL THEN 'playlist'
+               WHEN v.id IS NOT NULL THEN 'video'
+               ELSE NULL
+             END AS video_type,
+             yc.channel_name AS youtube_channel_name,
+             yc.channel_thumbnail AS youtube_channel_thumbnail,
+             yc.channel_id AS youtube_channel_external_id
+      FROM streams s
+      LEFT JOIN videos v ON s.video_id = v.id
+      LEFT JOIN playlists p ON s.video_id = p.id
+      LEFT JOIN youtube_channels yc ON s.youtube_channel_id = yc.id
+    `;
+    const normalizeRows = (rows) => {
+      (rows || []).forEach(row => {
+        row.loop_video = row.loop_video === 1;
+        row.use_advanced_settings = row.use_advanced_settings === 1;
+        row.is_youtube_api = row.is_youtube_api === 1;
+        row.youtube_monetization = row.youtube_monetization === 1;
+        row.nonstop = row.nonstop === 1;
+      });
+      return rows || [];
+    };
+
+    return new Promise((resolve, reject) => {
+      const activeQuery = `${baseSelect} WHERE s.user_id = ? AND s.status IN ('live', 'scheduled')
+        ORDER BY CASE s.status WHEN 'live' THEN 1 WHEN 'scheduled' THEN 2 ELSE 3 END, s.created_at DESC`;
+      db.all(activeQuery, [userId], (err, activeRows) => {
+        if (err) {
+          console.error('Error finding active streams:', err.message);
+          return reject(err);
+        }
+        db.get('SELECT COUNT(*) as count FROM streams WHERE user_id = ? AND status = ?', [userId, 'offline'], (countErr, countRow) => {
+          if (countErr) {
+            console.error('Error counting offline streams:', countErr.message);
+            return reject(countErr);
+          }
+          const offlineQuery = `${baseSelect} WHERE s.user_id = ? AND s.status = 'offline'
+            ORDER BY s.created_at DESC LIMIT ?`;
+          db.all(offlineQuery, [userId, offlineLimit], (offlineErr, offlineRows) => {
+            if (offlineErr) {
+              console.error('Error finding offline streams:', offlineErr.message);
+              return reject(offlineErr);
+            }
+            const streams = [...normalizeRows(activeRows), ...normalizeRows(offlineRows)];
+            resolve({
+              streams,
+              offlineTotalCount: countRow ? countRow.count : 0,
+              offlineShown: offlineRows ? offlineRows.length : 0
+            });
+          });
+        });
+      });
+    });
+  }
   static findAllPaginated(userId = null, options = {}) {
     const { page = 1, limit = 10, filter = null, search = '' } = options;
     const offset = (page - 1) * limit;
