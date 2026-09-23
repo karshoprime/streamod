@@ -5272,9 +5272,42 @@ const server = app.listen(port, '0.0.0.0', async () => {
   try {
     const streams = await Stream.findAll(null, 'live');
     if (streams && streams.length > 0) {
-      console.log(`Resetting ${streams.length} live streams to offline state...`);
-      for (const stream of streams) {
-        await Stream.updateStatus(stream.id, 'offline');
+      const nonstopStreams = streams.filter(s => s.nonstop);
+      const otherStreams = streams.filter(s => !s.nonstop);
+
+      if (otherStreams.length > 0) {
+        console.log(`Resetting ${otherStreams.length} live streams to offline state...`);
+        for (const stream of otherStreams) {
+          await Stream.updateStatus(stream.id, 'offline');
+        }
+      }
+
+      if (nonstopStreams.length > 0) {
+        // Live Nonstop streams are meant to survive restarts (pm2 restart, deploy,
+        // reboot) too, not just an in-process FFmpeg crash, so respawn them here
+        // instead of marking them offline like everything else.
+        console.log(`Auto-resuming ${nonstopStreams.length} Live Nonstop stream(s) after restart...`);
+        const baseUrl = process.env.BASE_URL || `http://localhost:${port}`;
+        const notificationService = require('./services/notificationService');
+        for (const stream of nonstopStreams) {
+          await Stream.updateStatus(stream.id, 'offline');
+          try {
+            const result = await streamingService.startStream(stream.id, false, baseUrl);
+            if (result.success) {
+              console.log(`[Boot] Resumed Live Nonstop stream "${stream.title}" (${stream.id})`);
+            } else {
+              console.error(`[Boot] Failed to resume Live Nonstop stream "${stream.title}": ${result.error}`);
+              notificationService.notify('stream_start_failed', {
+                title: 'Live Nonstop stream could not resume after restart',
+                message: result.error,
+                streamId: stream.id,
+                streamTitle: stream.title
+              });
+            }
+          } catch (resumeError) {
+            console.error(`[Boot] Error resuming Live Nonstop stream "${stream.title}":`, resumeError.message);
+          }
+        }
       }
     }
   } catch (error) {
