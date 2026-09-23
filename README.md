@@ -243,6 +243,12 @@ Tombol **Live Nonstop** (ikon ∞) di form Create/Edit stream (manual maupun You
 
 Untuk broadcast YouTube, "auto stop"-nya YouTube sendiri **dimatikan** selama stream nonstop berjalan, dan untuk stream terjadwal juga dimatikan sampai **30 menit sebelum End Time** — supaya restart/reconnect sesaat tidak bikin YouTube ikut mengakhiri broadcast-nya secara sepihak. Begitu masuk 30 menit terakhir sebelum End Time, auto stop otomatis dinyalakan lagi sebagai jaring pengaman kalau logika stop kita sendiri gagal. Aplikasi juga mengecek status broadcast lama sebelum dipakai ulang (misal setelah resume) — kalau ternyata sudah di-*end* dari sisi YouTube (manual di YouTube Studio atau oleh auto stop), broadcast baru otomatis dibuat (key stream/RTMP tetap dipakai ulang bila namanya sama) alih-alih terus mendorong data ke broadcast yang sudah mati.
 
+## 🎚️ Audio Mixing di Playlist
+
+Di form Create/Edit Playlist, tab **Audios**, ada panel **Audio Mixing**. Secara default (toggle mati) audio dari background music yang dipilih akan **mengganti total** audio asli videonya (perilaku lama). Aktifkan toggle **Mix with original audio** supaya audio asli video dan background music sama-sama kedengaran — masing-masing punya slider gain sendiri (0%-200%) untuk atur keseimbangan volumenya.
+
+Tombol **Preview mix** memutar video pertama + audio pertama yang dipilih langsung di browser (pakai Web Audio API, tanpa lewat server/FFmpeg sama sekali) sehingga volumenya langsung berubah real-time begitu slider digeser — jadi bisa diatur dulu by-ear sebelum disimpan. Catatan: kalau video sumbernya memang tidak punya audio track sama sekali, mode mix tidak akan menghasilkan apa-apa dari sisi video itu (tidak ada yang bisa di-mix); pakai mode default (replace) untuk video semacam itu.
+
 ## 🔔 Notifikasi Telegram / Webhook
 
 Settings → Integration → **Alert Notifications** (khusus admin). Isi token bot Telegram (dari @BotFather) + chat ID, dan/atau URL webhook (n8n, Discord, gateway WhatsApp, dll.), pilih event, lalu klik **Send test**.

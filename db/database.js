@@ -426,7 +426,13 @@ function createTables() {
         // across edits/re-broadcasts the same way a rotation's name identifies its
         // key stream, plus the "Live Nonstop" flag (loop forever, no schedule).
         ['streams', 'key_stream_name', 'TEXT'],
-        ['streams', 'nonstop', 'INTEGER DEFAULT 0']
+        ['streams', 'nonstop', 'INTEGER DEFAULT 0'],
+        // --- Playlist audio mixing: 'replace' (default, old behavior - background
+        // music replaces the video's own audio) or 'mix' (both are mixed together,
+        // each at its own gain).
+        ['playlists', 'audio_mix_mode', "TEXT DEFAULT 'replace'"],
+        ['playlists', 'video_audio_gain', 'REAL DEFAULT 1'],
+        ['playlists', 'playlist_audio_gain', 'REAL DEFAULT 1']
       ];
 
       extraColumns.forEach(([table, column, type]) => {

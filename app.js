@@ -88,6 +88,16 @@ function parseBoolField(value) {
 }
 
 /**
+ * Playlist audio gain (0%-200% slider on the client) stored as a 0-2 multiplier.
+ * Defaults to 1 (100%, unchanged) for anything missing/invalid.
+ */
+function parseGain(value) {
+  const num = parseFloat(value);
+  if (Number.isNaN(num)) return 1;
+  return Math.min(2, Math.max(0, num));
+}
+
+/**
  * "Live Nonstop": the stream loops forever with no schedule/duration/repeat.
  * Forces schedule/end/duration/repeat off so the two features never conflict.
  */
@@ -4600,7 +4610,10 @@ app.post('/api/playlists', isAuthenticated, [
       name: req.body.name,
       description: req.body.description || null,
       is_shuffle: req.body.shuffle === 'true' || req.body.shuffle === true,
-      user_id: req.session.userId
+      user_id: req.session.userId,
+      audio_mix_mode: req.body.audioMixMode === 'mix' ? 'mix' : 'replace',
+      video_audio_gain: parseGain(req.body.videoAudioGain),
+      playlist_audio_gain: parseGain(req.body.playlistAudioGain)
     };
 
     const playlist = await Playlist.create(playlistData);
@@ -4663,7 +4676,10 @@ app.put('/api/playlists/:id', isAuthenticated, [
     const updateData = {
       name: req.body.name,
       description: req.body.description || null,
-      is_shuffle: req.body.shuffle === 'true' || req.body.shuffle === true
+      is_shuffle: req.body.shuffle === 'true' || req.body.shuffle === true,
+      audio_mix_mode: req.body.audioMixMode === 'mix' ? 'mix' : 'replace',
+      video_audio_gain: parseGain(req.body.videoAudioGain),
+      playlist_audio_gain: parseGain(req.body.playlistAudioGain)
     };
 
     const updatedPlaylist = await Playlist.update(req.params.id, updateData);

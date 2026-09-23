@@ -197,7 +197,50 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
   }
   fs.writeFileSync(audioConcatFile, audioContent);
 
+  // 'mix' keeps the video's own audio AND the playlist's background audio, blended
+  // at their own gains (0-2, i.e. 0%-200%). 'replace' (the default, old behavior)
+  // just swaps the video's audio out for the playlist audio entirely.
+  const isMixMode = playlist.audio_mix_mode === 'mix';
+  const clampGain = (value) => {
+    const num = parseFloat(value);
+    return Number.isFinite(num) ? Math.min(2, Math.max(0, num)) : 1;
+  };
+  const videoGain = clampGain(playlist.video_audio_gain);
+  const audioGain = clampGain(playlist.playlist_audio_gain);
+  // Mixed audio always has to be re-encoded (it's the output of a filter, not a
+  // passthrough stream), even when video itself stays codec-copy.
+  const mixFilterComplex = `[0:a]volume=${videoGain}[va];[1:a]volume=${audioGain}[aa];[va][aa]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]`;
+
   if (!stream.use_advanced_settings) {
+    if (isMixMode) {
+      return [
+        '-nostdin',
+        '-loglevel', 'warning',
+        '-stats',
+        '-re',
+        '-fflags', '+genpts+igndts+discardcorrupt',
+        '-avoid_negative_ts', 'make_zero',
+        '-f', 'concat',
+        '-safe', '0',
+        '-i', concatFile,
+        '-re',
+        '-f', 'concat',
+        '-safe', '0',
+        '-i', audioConcatFile,
+        '-filter_complex', mixFilterComplex,
+        '-map', '0:v:0',
+        '-map', '[aout]',
+        '-c:v', 'copy',
+        '-c:a', 'aac',
+        '-b:a', '128k',
+        '-ar', '44100',
+        '-ac', '2',
+        '-f', 'flv',
+        '-flvflags', 'no_duration_filesize',
+        rtmpUrl
+      ];
+    }
+
     return [
       '-nostdin',
       '-loglevel', 'warning',
@@ -225,6 +268,48 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
   const resolution = stream.resolution || '1280x720';
   const bitrate = stream.bitrate || 2500;
   const fps = stream.fps || 30;
+
+  if (isMixMode) {
+    return [
+      '-nostdin',
+      '-loglevel', 'warning',
+      '-stats',
+      '-re',
+      '-fflags', '+genpts+igndts+discardcorrupt',
+      '-avoid_negative_ts', 'make_zero',
+      '-f', 'concat',
+      '-safe', '0',
+      '-i', concatFile,
+      '-re',
+      '-f', 'concat',
+      '-safe', '0',
+      '-i', audioConcatFile,
+      '-filter_complex', mixFilterComplex,
+      '-map', '0:v:0',
+      '-map', '[aout]',
+      '-c:v', 'libx264',
+      '-preset', 'veryfast',
+      '-tune', 'zerolatency',
+      '-profile:v', 'high',
+      '-level', '4.1',
+      '-b:v', `${bitrate}k`,
+      '-maxrate', `${Math.round(bitrate * 1.1)}k`,
+      '-bufsize', `${bitrate * 2}k`,
+      '-pix_fmt', 'yuv420p',
+      '-g', String(fps * 2),
+      '-keyint_min', String(fps),
+      '-sc_threshold', '0',
+      '-s', resolution,
+      '-r', String(fps),
+      '-c:a', 'aac',
+      '-b:a', '128k',
+      '-ar', '44100',
+      '-ac', '2',
+      '-f', 'flv',
+      '-flvflags', 'no_duration_filesize',
+      rtmpUrl
+    ];
+  }
 
   return [
     '-nostdin',

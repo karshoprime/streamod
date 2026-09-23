@@ -288,6 +288,48 @@
                 </div>
               </div>
             </div>
+
+            <div class="mt-4 bg-dark-700 rounded-lg border border-gray-600 p-4">
+              <div class="flex items-center justify-between gap-4 mb-1">
+                <div>
+                  <h4 class="text-sm font-medium text-gray-300">Audio Mixing</h4>
+                  <p class="text-xs text-gray-500 mt-0.5">By default, background music REPLACES the video's original audio.</p>
+                </div>
+                <label class="flex items-center gap-2 cursor-pointer select-none flex-shrink-0">
+                  <span class="text-xs text-gray-400">Mix with original audio</span>
+                  <input type="checkbox" id="audioMixMode" class="sr-only peer" onchange="toggleAudioMixControls()">
+                  <div class="relative w-10 h-5 bg-gray-600 peer-checked:bg-primary rounded-full transition-colors">
+                    <div class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform peer-checked:translate-x-5"></div>
+                  </div>
+                </label>
+              </div>
+
+              <div id="audioMixGainControls" class="hidden space-y-3 mt-3">
+                <div>
+                  <div class="flex items-center justify-between text-xs text-gray-400 mb-1">
+                    <span>Video's original audio</span>
+                    <span id="videoGainLabel">100%</span>
+                  </div>
+                  <input type="range" id="videoAudioGain" min="0" max="200" value="100" class="w-full accent-primary" oninput="onGainChange()">
+                </div>
+                <div>
+                  <div class="flex items-center justify-between text-xs text-gray-400 mb-1">
+                    <span>Background music</span>
+                    <span id="audioGainLabel">100%</span>
+                  </div>
+                  <input type="range" id="playlistAudioGain" min="0" max="200" value="100" class="w-full accent-primary" oninput="onGainChange()">
+                </div>
+
+                <div class="flex items-center gap-2 pt-1">
+                  <button type="button" id="previewMixBtn" onclick="togglePreviewMix()"
+                    class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-dark-800 hover:bg-dark-600 border border-gray-600 rounded-lg transition-colors">
+                    <i class="ti ti-player-play" id="previewMixIcon"></i>
+                    <span id="previewMixLabel">Preview mix</span>
+                  </button>
+                  <span class="text-xs text-gray-500">Plays the first video + first background track together, live, as you drag the sliders.</span>
+                </div>
+              </div>
+            </div>
           </div>
         </form>
       </div>
@@ -420,6 +462,7 @@ function openCreatePlaylistModal() {
   document.getElementById('submitButtonText').textContent = 'Create Playlist';
   document.getElementById('playlistForm').reset();
   document.getElementById('playlistId').value = '';
+  resetAudioMixControls();
   switchTab('videos');
   updateSelectedVideosDisplay();
   updateAvailableVideosDisplay();
@@ -433,6 +476,7 @@ function openCreatePlaylistModal() {
 }
 
 function closePlaylistModal() {
+  stopPreviewMix();
   const modal = document.getElementById('playlistModal');
   modal.classList.remove('active');
   setTimeout(() => {
@@ -496,6 +540,120 @@ function clearAllAudios() {
   updateSelectedAudiosDisplay();
   updateAvailableAudiosDisplay();
   updateBadges();
+}
+
+// --- Audio mixing: toggle + gain sliders + live in-browser preview -----------
+// The preview never touches the server/FFmpeg - it plays the first selected
+// video and the first selected background track together via the Web Audio
+// API, with a GainNode per source wired straight to the two sliders, so
+// dragging a slider changes the volume instantly while it's playing.
+
+let previewAudioCtx = null;
+let previewVideoEl = null;
+let previewAudioEl = null;
+let previewVideoGainNode = null;
+let previewAudioGainNode = null;
+let previewPlaying = false;
+
+function resetAudioMixControls() {
+  stopPreviewMix();
+  document.getElementById('audioMixMode').checked = false;
+  document.getElementById('videoAudioGain').value = 100;
+  document.getElementById('playlistAudioGain').value = 100;
+  toggleAudioMixControls();
+  onGainChange();
+}
+
+function toggleAudioMixControls() {
+  const enabled = document.getElementById('audioMixMode').checked;
+  document.getElementById('audioMixGainControls').classList.toggle('hidden', !enabled);
+  if (!enabled) stopPreviewMix();
+}
+
+function onGainChange() {
+  const vGain = parseInt(document.getElementById('videoAudioGain').value, 10);
+  const aGain = parseInt(document.getElementById('playlistAudioGain').value, 10);
+  document.getElementById('videoGainLabel').textContent = vGain + '%';
+  document.getElementById('audioGainLabel').textContent = aGain + '%';
+  if (previewVideoGainNode) previewVideoGainNode.gain.value = vGain / 100;
+  if (previewAudioGainNode) previewAudioGainNode.gain.value = aGain / 100;
+}
+
+function togglePreviewMix() {
+  if (previewPlaying) {
+    stopPreviewMix();
+  } else {
+    startPreviewMix();
+  }
+}
+
+function startPreviewMix() {
+  if (selectedVideos.length === 0 || selectedAudios.length === 0) {
+    showToast('Add at least 1 video and 1 background audio first to preview the mix', 'error');
+    return;
+  }
+
+  stopPreviewMix();
+
+  const video = selectedVideos[0];
+  const audio = selectedAudios[0];
+
+  previewVideoEl = document.createElement('video');
+  previewVideoEl.src = video.filepath;
+  previewVideoEl.loop = true;
+  previewVideoEl.style.display = 'none';
+
+  previewAudioEl = document.createElement('audio');
+  previewAudioEl.src = audio.filepath;
+  previewAudioEl.loop = true;
+
+  document.body.appendChild(previewVideoEl);
+  document.body.appendChild(previewAudioEl);
+
+  try {
+    previewAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const videoSource = previewAudioCtx.createMediaElementSource(previewVideoEl);
+    const audioSource = previewAudioCtx.createMediaElementSource(previewAudioEl);
+
+    previewVideoGainNode = previewAudioCtx.createGain();
+    previewAudioGainNode = previewAudioCtx.createGain();
+    previewVideoGainNode.gain.value = parseInt(document.getElementById('videoAudioGain').value, 10) / 100;
+    previewAudioGainNode.gain.value = parseInt(document.getElementById('playlistAudioGain').value, 10) / 100;
+
+    videoSource.connect(previewVideoGainNode).connect(previewAudioCtx.destination);
+    audioSource.connect(previewAudioGainNode).connect(previewAudioCtx.destination);
+  } catch (err) {
+    console.error('Could not set up preview mix audio graph:', err);
+    showToast('Preview is not supported in this browser', 'error');
+    stopPreviewMix();
+    return;
+  }
+
+  Promise.all([previewVideoEl.play(), previewAudioEl.play()])
+    .then(() => {
+      previewPlaying = true;
+      document.getElementById('previewMixIcon').className = 'ti ti-player-pause';
+      document.getElementById('previewMixLabel').textContent = 'Stop preview';
+    })
+    .catch(err => {
+      console.error('Preview playback failed:', err);
+      showToast('Could not play preview (browser blocked autoplay?)', 'error');
+      stopPreviewMix();
+    });
+}
+
+function stopPreviewMix() {
+  previewPlaying = false;
+  const icon = document.getElementById('previewMixIcon');
+  const label = document.getElementById('previewMixLabel');
+  if (icon) icon.className = 'ti ti-player-play';
+  if (label) label.textContent = 'Preview mix';
+
+  if (previewVideoEl) { previewVideoEl.pause(); previewVideoEl.remove(); previewVideoEl = null; }
+  if (previewAudioEl) { previewAudioEl.pause(); previewAudioEl.remove(); previewAudioEl = null; }
+  if (previewAudioCtx) { previewAudioCtx.close().catch(() => {}); previewAudioCtx = null; }
+  previewVideoGainNode = null;
+  previewAudioGainNode = null;
 }
 
 function formatDuration(seconds) {
@@ -595,7 +753,13 @@ function editPlaylist(playlistId) {
         document.getElementById('playlistName').value = playlist.name;
         document.getElementById('playlistDescription').value = playlist.description || '';
         document.getElementById('playlistShuffle').value = (playlist.shuffle || playlist.is_shuffle) ? "true" : "false";
-        
+
+        document.getElementById('audioMixMode').checked = playlist.audio_mix_mode === 'mix';
+        document.getElementById('videoAudioGain').value = Math.round((playlist.video_audio_gain ?? 1) * 100);
+        document.getElementById('playlistAudioGain').value = Math.round((playlist.playlist_audio_gain ?? 1) * 100);
+        toggleAudioMixControls();
+        onGainChange();
+
         switchTab('videos');
         updateSelectedVideosDisplay();
         updateAvailableVideosDisplay();
@@ -723,7 +887,10 @@ function submitPlaylist() {
     description: document.getElementById('playlistDescription').value.trim(),
     shuffle: document.getElementById('playlistShuffle').value === 'true',
     videos: selectedVideos.map(v => v.id),
-    audios: selectedAudios.map(a => a.id)
+    audios: selectedAudios.map(a => a.id),
+    audioMixMode: document.getElementById('audioMixMode').checked ? 'mix' : 'replace',
+    videoAudioGain: parseInt(document.getElementById('videoAudioGain').value, 10) / 100,
+    playlistAudioGain: parseInt(document.getElementById('playlistAudioGain').value, 10) / 100
   };
   
   const url = currentPlaylistId ? `/api/playlists/${currentPlaylistId}` : '/api/playlists';
