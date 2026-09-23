@@ -5269,45 +5269,33 @@ const server = app.listen(port, '0.0.0.0', async () => {
   } else {
     console.log(`  http://localhost:${port}`);
   }
+  // Streams worth respawning after a restart (pm2 restart, deploy, reboot): Live
+  // Nonstop ones always, plus ordinary scheduled streams that are still inside
+  // their Start/End window (an in-progress schedule shouldn't "end" just because
+  // the process restarted). Anything else keeps the old behavior: reset offline.
+  let streamsToResume = [];
   try {
     const streams = await Stream.findAll(null, 'live');
     if (streams && streams.length > 0) {
-      const nonstopStreams = streams.filter(s => s.nonstop);
-      const otherStreams = streams.filter(s => !s.nonstop);
+      const now = new Date();
+      const stillWithinSchedule = (s) => !!s.end_time && new Date(s.end_time) > now;
 
-      if (otherStreams.length > 0) {
-        console.log(`Resetting ${otherStreams.length} live streams to offline state...`);
-        for (const stream of otherStreams) {
+      streamsToResume = streams.filter(s => s.nonstop || stillWithinSchedule(s));
+      const toReset = streams.filter(s => !s.nonstop && !stillWithinSchedule(s));
+
+      if (toReset.length > 0) {
+        console.log(`Resetting ${toReset.length} live streams to offline state...`);
+        for (const stream of toReset) {
           await Stream.updateStatus(stream.id, 'offline');
         }
       }
-
-      if (nonstopStreams.length > 0) {
-        // Live Nonstop streams are meant to survive restarts (pm2 restart, deploy,
-        // reboot) too, not just an in-process FFmpeg crash, so respawn them here
-        // instead of marking them offline like everything else.
-        console.log(`Auto-resuming ${nonstopStreams.length} Live Nonstop stream(s) after restart...`);
-        const baseUrl = process.env.BASE_URL || `http://localhost:${port}`;
-        const notificationService = require('./services/notificationService');
-        for (const stream of nonstopStreams) {
-          await Stream.updateStatus(stream.id, 'offline');
-          try {
-            const result = await streamingService.startStream(stream.id, false, baseUrl);
-            if (result.success) {
-              console.log(`[Boot] Resumed Live Nonstop stream "${stream.title}" (${stream.id})`);
-            } else {
-              console.error(`[Boot] Failed to resume Live Nonstop stream "${stream.title}": ${result.error}`);
-              notificationService.notify('stream_start_failed', {
-                title: 'Live Nonstop stream could not resume after restart',
-                message: result.error,
-                streamId: stream.id,
-                streamTitle: stream.title
-              });
-            }
-          } catch (resumeError) {
-            console.error(`[Boot] Error resuming Live Nonstop stream "${stream.title}":`, resumeError.message);
-          }
-        }
+      // Clear the resumable ones to offline too for now; they're flipped back to
+      // live by streamingService.startStream() once actually resumed below.
+      // preserveEndTime keeps end_time (and start_time) intact so startStream()
+      // still sees the original schedule window and can re-arm the termination
+      // timer for it — a plain updateStatus('offline') would null end_time out.
+      for (const stream of streamsToResume) {
+        await Stream.updateStatus(stream.id, 'offline', null, { preserveEndTime: true });
       }
     }
   } catch (error) {
@@ -5316,6 +5304,29 @@ const server = app.listen(port, '0.0.0.0', async () => {
   schedulerService.init(streamingService);
   rotationService.init();
   require('./services/notificationService').init();
+  if (streamsToResume.length > 0) {
+    console.log(`Auto-resuming ${streamsToResume.length} stream(s) after restart (nonstop or still within schedule)...`);
+    const baseUrl = process.env.BASE_URL || `http://localhost:${port}`;
+    const notificationService = require('./services/notificationService');
+    for (const stream of streamsToResume) {
+      try {
+        const result = await streamingService.startStream(stream.id, false, baseUrl);
+        if (result.success) {
+          console.log(`[Boot] Resumed stream "${stream.title}" (${stream.id})${stream.nonstop ? ' [nonstop]' : ' [within schedule]'}`);
+        } else {
+          console.error(`[Boot] Failed to resume stream "${stream.title}": ${result.error}`);
+          notificationService.notify('stream_start_failed', {
+            title: 'Stream could not resume after restart',
+            message: result.error,
+            streamId: stream.id,
+            streamTitle: stream.title
+          });
+        }
+      } catch (resumeError) {
+        console.error(`[Boot] Error resuming stream "${stream.title}":`, resumeError.message);
+      }
+    }
+  }
   try {
     await streamingService.syncStreamStatuses();
   } catch (error) {
