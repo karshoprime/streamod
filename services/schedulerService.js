@@ -1,6 +1,9 @@
 const Stream = require('../models/Stream');
 
 const scheduledTerminations = new Map();
+// Dedupe so we only push the "enable YouTube auto-stop" update once per stream,
+// not on every 30s poll while inside the last-stretch-before-End-Time window.
+const autoStopFlipped = new Set();
 const SCHEDULE_CHECK_INTERVAL = 15000;
 const DURATION_CHECK_INTERVAL = 30000;
 const RECURRING_CHECK_INTERVAL = 60000;
@@ -144,14 +147,33 @@ async function checkStreamDurations() {
 
       if (timeUntilEnd <= 0) {
         scheduledTerminations.delete(stream.id);
+        autoStopFlipped.delete(stream.id);
 
         try {
           await streamingService.stopStream(stream.id);
         } catch (e) {
           await Stream.updateStatus(stream.id, 'offline', stream.user_id);
         }
-      } else if (timeUntilEnd <= 60000 && !scheduledTerminations.has(stream.id)) {
+        continue;
+      }
+
+      if (timeUntilEnd <= 60000 && !scheduledTerminations.has(stream.id)) {
         scheduleStreamTermination(stream.id, timeUntilEnd / 60000, stream.user_id);
+      }
+
+      // YouTube's own "auto stop" stays off for most of a scheduled stream (so a
+      // brief restart/reconnect blip doesn't make YouTube end the broadcast on us)
+      // and only gets turned on once we're inside the last stretch before End Time,
+      // as a safety net. See youtubeService.computeAutoStopEnabled for the mirrored
+      // logic applied at broadcast-creation time.
+      if (stream.is_youtube_api && !stream.nonstop && !autoStopFlipped.has(stream.id)) {
+        try {
+          const youtubeService = require('./youtubeService');
+          if (timeUntilEnd <= youtubeService.AUTO_STOP_LEAD_MS) {
+            autoStopFlipped.add(stream.id);
+            youtubeService.updateBroadcastAutoStop(stream.id, true).catch(() => {});
+          }
+        } catch (e) { /* youtubeService not usable (e.g. missing config) — skip silently */ }
       }
     }
   } catch (error) {
@@ -224,6 +246,7 @@ function getScheduledTermination(streamId) {
 }
 
 function handleStreamStopped(streamId) {
+  autoStopFlipped.delete(streamId);
   return cancelStreamTermination(streamId);
 }
 
@@ -244,6 +267,7 @@ function shutdown() {
     }
   }
   scheduledTerminations.clear();
+  autoStopFlipped.clear();
 }
 
 module.exports = {

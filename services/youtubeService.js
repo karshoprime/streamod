@@ -49,6 +49,30 @@ async function handleYouTubeAuthError(channel, error) {
 
 const loggedAlreadyHasBroadcast = new Set();
 
+// How long before End Time we let YouTube's own "auto stop" take over. Kept off
+// for the bulk of a scheduled/nonstop stream so a brief hiccup (server restart,
+// FFmpeg reconnect) doesn't make YouTube end the broadcast on its own — only
+// turned on close to the real end, as a safety net so the broadcast still wraps
+// up cleanly if our own termination logic doesn't fire for some reason.
+const AUTO_STOP_LEAD_MS = 30 * 60 * 1000;
+
+/**
+ * Whether the broadcast's contentDetails.enableAutoStop should be on right now:
+ * - Live Nonstop streams: always off (there is no "end" to auto-stop at).
+ * - Scheduled streams (have end_time): off until AUTO_STOP_LEAD_MS before end_time,
+ *   then on, so YouTube itself can close things out if our own stop logic misses.
+ * - No schedule at all (ad-hoc "Go Live Now"): unchanged, YouTube default (on).
+ */
+function computeAutoStopEnabled(stream, now = new Date()) {
+  if (stream.nonstop) return false;
+  if (stream.end_time) {
+    const endTime = new Date(stream.end_time);
+    const autoStopFrom = new Date(endTime.getTime() - AUTO_STOP_LEAD_MS);
+    return now >= autoStopFrom;
+  }
+  return true;
+}
+
 function getYouTubeOAuth2Client(clientId, clientSecret, redirectUri) {
   return new google.auth.OAuth2(clientId, clientSecret, redirectUri);
 }
@@ -402,20 +426,6 @@ async function createYouTubeBroadcastInner(streamId, baseUrl) {
     return { success: true, message: 'Not a YouTube API stream' };
   }
 
-  if (stream.youtube_broadcast_id && stream.rtmp_url && stream.stream_key) {
-    if (!loggedAlreadyHasBroadcast.has(streamId)) {
-      console.log(`[YouTubeService] Stream ${streamId} already has YouTube broadcast, skipping creation`);
-      loggedAlreadyHasBroadcast.add(streamId);
-    }
-    return { 
-      success: true, 
-      rtmpUrl: stream.rtmp_url, 
-      streamKey: stream.stream_key,
-      broadcastId: stream.youtube_broadcast_id,
-      streamId: stream.youtube_stream_id
-    };
-  }
-
   const user = await User.findById(stream.user_id);
   if (!user || !user.youtube_client_id || !user.youtube_client_secret) {
     throw new Error('YouTube API credentials not configured');
@@ -456,6 +466,45 @@ async function createYouTubeBroadcastInner(streamId, baseUrl) {
 
   const youtube = google.youtube({ version: 'v3', auth: oauth2Client });
 
+  if (stream.youtube_broadcast_id && stream.rtmp_url && stream.stream_key) {
+    // Reusing a broadcast we already created blindly assumed it was still usable.
+    // If it was already ended on YouTube's side (manually stopped in Studio, or
+    // YouTube's own auto-stop kicked in) the old ingestion is dead — pushing FFmpeg
+    // into it does nothing, so verify it's still alive before reusing it.
+    const ENDED_LIFECYCLE_STATUSES = ['complete', 'revoked'];
+    let reuseOk = true;
+    try {
+      const existingResp = await youtube.liveBroadcasts.list({
+        part: 'status',
+        id: stream.youtube_broadcast_id
+      });
+      const existingBroadcast = existingResp.data.items?.[0];
+      const lifeCycleStatus = existingBroadcast?.status?.lifeCycleStatus || null;
+      if (!existingBroadcast || ENDED_LIFECYCLE_STATUSES.includes(lifeCycleStatus)) {
+        reuseOk = false;
+        console.log(`[YouTubeService] Stream ${streamId}'s saved broadcast ${stream.youtube_broadcast_id} is ${lifeCycleStatus || 'gone'} on YouTube — creating a new broadcast instead of reusing it`);
+      }
+    } catch (checkError) {
+      // Can't verify right now (transient API hiccup) — don't block a resume over it,
+      // reuse optimistically like before.
+      console.warn(`[YouTubeService] Could not verify broadcast status for stream ${streamId}, reusing anyway: ${checkError.message}`);
+    }
+
+    if (reuseOk) {
+      if (!loggedAlreadyHasBroadcast.has(streamId)) {
+        console.log(`[YouTubeService] Stream ${streamId} already has YouTube broadcast, skipping creation`);
+        loggedAlreadyHasBroadcast.add(streamId);
+      }
+      return {
+        success: true,
+        rtmpUrl: stream.rtmp_url,
+        streamKey: stream.stream_key,
+        broadcastId: stream.youtube_broadcast_id,
+        streamId: stream.youtube_stream_id
+      };
+    }
+  }
+
   const tagsArray = stream.youtube_tags ? stream.youtube_tags.split(',').map(t => t.trim()).filter(t => t) : [];
 
   const broadcastSnippet = {
@@ -471,7 +520,7 @@ async function createYouTubeBroadcastInner(streamId, baseUrl) {
     snippet: broadcastSnippet,
     contentDetails: {
       enableAutoStart: true,
-      enableAutoStop: true,
+      enableAutoStop: computeAutoStopEnabled(stream),
       monitorStream: {
         enableMonitorStream: false
       }
@@ -612,7 +661,7 @@ async function createYouTubeBroadcastInner(streamId, baseUrl) {
   return {
     success: true,
     broadcastId: broadcast.id,
-    streamId: liveStream.id,
+    streamId: keyStream.streamId,
     rtmpUrl: rtmpUrl,
     streamKey: streamKey
   };
@@ -641,9 +690,71 @@ async function deleteYouTubeBroadcast(streamId) {
   }
 }
 
+/**
+ * Flips contentDetails.enableAutoStop on a live broadcast without touching anything
+ * else on it (title, monetization, binding, ...). Used by the scheduler to turn
+ * YouTube's own auto-stop back on once a scheduled stream is within
+ * AUTO_STOP_LEAD_MS of its End Time. Best-effort: failures are logged and returned,
+ * never thrown, since this runs from a background poll with no one to catch it.
+ */
+async function updateBroadcastAutoStop(streamId, enableAutoStop, baseUrl) {
+  try {
+    const stream = await Stream.findById(streamId);
+    if (!stream || !stream.is_youtube_api || !stream.youtube_broadcast_id) {
+      return { success: true, message: 'No YouTube broadcast to update' };
+    }
+
+    const { youtube } = await getYouTubeClientForStream(stream, baseUrl ? `${baseUrl}/auth/youtube/callback` : undefined);
+
+    const currentResp = await youtube.liveBroadcasts.list({
+      part: 'id,contentDetails,status',
+      id: stream.youtube_broadcast_id
+    });
+    const currentBroadcast = currentResp.data.items?.[0];
+    if (!currentBroadcast) {
+      return { success: true, message: 'Broadcast no longer exists' };
+    }
+
+    const lifeCycleStatus = currentBroadcast.status?.lifeCycleStatus || null;
+    if (['complete', 'revoked'].includes(lifeCycleStatus)) {
+      return { success: true, message: `Broadcast already ${lifeCycleStatus}, nothing to update` };
+    }
+
+    const currentContentDetails = currentBroadcast.contentDetails || {};
+    if (!!currentContentDetails.enableAutoStop === !!enableAutoStop) {
+      return { success: true, message: 'Already set', changed: false };
+    }
+
+    await youtube.liveBroadcasts.update({
+      part: 'id,contentDetails',
+      requestBody: {
+        id: stream.youtube_broadcast_id,
+        contentDetails: {
+          ...currentContentDetails,
+          enableAutoStop: !!enableAutoStop
+        }
+      }
+    });
+
+    console.log(`[YouTubeService] Broadcast ${stream.youtube_broadcast_id} (stream ${streamId}) auto-stop set to ${!!enableAutoStop}`);
+    return { success: true, changed: true };
+  } catch (error) {
+    try {
+      const stream = await Stream.findById(streamId);
+      const channel = stream?.youtube_channel_id ? await YoutubeChannel.findById(stream.youtube_channel_id) : null;
+      await handleYouTubeAuthError(channel, error);
+    } catch (e) { /* ignore */ }
+    console.warn(`[YouTubeService] Could not update auto-stop for stream ${streamId}: ${error.message}`);
+    return { success: false, error: error.message };
+  }
+}
+
 module.exports = {
   createYouTubeBroadcast,
   deleteYouTubeBroadcast,
+  updateBroadcastAutoStop,
+  computeAutoStopEnabled,
+  AUTO_STOP_LEAD_MS,
   getYouTubeOAuth2Client,
   getYouTubeClientForChannel,
   getYouTubeClientForStream,
