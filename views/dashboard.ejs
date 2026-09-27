@@ -614,13 +614,13 @@
                             <p id="ytChannelSubsDisplay" class="text-xs text-gray-400"><%= typeof youtubeSubscriberCount !== 'undefined' ? Number(youtubeSubscriberCount).toLocaleString() : '0' %> subscribers</p>
                           </div>
                         </div>
-                        <% if (typeof youtubeChannels !== 'undefined' && youtubeChannels.length > 1) { %>
+                        <% if (typeof youtubeChannels !== 'undefined' && youtubeChannels.length > 0) { %>
                         <button type="button" onclick="toggleChannelSelector()" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors text-sm flex-shrink-0">
                           <i class="ti ti-switch-horizontal mr-1"></i>Change
                         </button>
                         <% } %>
                       </div>
-                      <% if (typeof youtubeChannels !== 'undefined' && youtubeChannels.length > 1) { %>
+                      <% if (typeof youtubeChannels !== 'undefined' && youtubeChannels.length > 0) { %>
                       <div id="channelSelectorDropdown" class="hidden mt-3 pt-3 border-t border-gray-700 space-y-2">
                         <% youtubeChannels.forEach(function(channel) { %>
                         <button type="button" onclick="selectYtChannel('<%= channel.id %>', '<%= channel.channel_name %>', '<%= channel.channel_thumbnail %>', '<%= channel.subscriber_count %>')"
@@ -1115,54 +1115,6 @@
                       <span id="editYtTagsCharCount" class="text-xs text-gray-500">0/500</span>
                     </div>
                   </div>
-
-                  <div class="h-[42px] flex items-center justify-between">
-                    <div class="flex items-center gap-2">
-                      <label class="text-sm text-gray-200">Enable Schedule</label>
-                      <span id="editYtServerTimeDisplay" class="bg-gray-700 text-xs text-gray-300 px-2 py-0.5 rounded">loading...</span>
-                    </div>
-                    <label class="relative inline-flex items-center cursor-pointer">
-                      <input type="checkbox" id="editYtEnableSchedule" class="sr-only peer">
-                      <div class="w-11 h-6 bg-dark-900 border border-gray-600 rounded-full peer peer-checked:bg-primary peer-checked:border-primary"></div>
-                      <div class="absolute left-[2px] top-[2px] w-5 h-5 bg-white rounded-full transition-all peer-checked:translate-x-5"></div>
-                    </label>
-                  </div>
-
-                  <div class="h-[42px] flex items-center justify-between">
-                    <label class="text-sm text-gray-200 flex items-center gap-1"><i class="ti ti-infinity text-primary"></i>Live Nonstop</label>
-                    <label class="relative inline-flex items-center cursor-pointer">
-                      <input type="checkbox" id="editYtNonstopMode" class="sr-only peer">
-                      <div class="w-11 h-6 bg-dark-900 border border-gray-600 rounded-full peer peer-checked:bg-primary peer-checked:border-primary"></div>
-                      <div class="absolute left-[2px] top-[2px] w-5 h-5 bg-white rounded-full transition-all peer-checked:translate-x-5"></div>
-                    </label>
-                  </div>
-                  <p id="editYtNonstopHint" class="hidden text-[11px] text-gray-500 -mt-2">Live Nonstop: loops forever, no end time, restarts itself if it drops. Turns Enable Schedule off.</p>
-
-                  <div id="editYtAdPanelContainer"></div>
-                  <div id="editYtLangPanelContainer"></div>
-
-                  <div id="editYtScheduleSettings" class="hidden space-y-4">
-                    <div>
-                      <label class="text-xs text-gray-400 block mb-1">Start Time</label>
-                      <input type="datetime-local" id="editYtScheduleStart" name="ytScheduleStart" class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white [color-scheme:dark]">
-                    </div>
-                    <div>
-                      <label class="text-xs text-gray-400 mb-1 flex items-center">
-                        <span>End Time</span>
-                        <span id="editYtDurationBadge" class="ml-2 bg-gray-700 text-xs text-gray-300 px-2 py-0.5 rounded hidden">00:00</span>
-                      </label>
-                      <input type="datetime-local" id="editYtScheduleEnd" name="ytScheduleEnd" class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white [color-scheme:dark]">
-                    </div>
-                    <div>
-                      <label class="text-xs text-gray-400 block mb-1">Repeat</label>
-                      <select id="editYtRepeatMode" name="repeatMode" class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white">
-                        <option value="none" selected>Once</option>
-                        <option value="daily">Every day (same time)</option>
-                        <option value="weekly">Every week</option>
-                      </select>
-                      <p class="text-[11px] text-gray-500 mt-1">After the end time the stream is re-scheduled automatically with a fresh broadcast.</p>
-                    </div>
-                  </div>
                 </div>
 
                 <div class="space-y-4">
@@ -1179,13 +1131,13 @@
                             <p id="editYtChannelSubsDisplay" class="text-xs text-gray-400"><%= typeof youtubeSubscriberCount !== 'undefined' ? Number(youtubeSubscriberCount).toLocaleString() : '0' %> subscribers</p>
                           </div>
                         </div>
-                        <% if (typeof youtubeChannels !== 'undefined' && youtubeChannels.length > 1) { %>
+                        <% if (typeof youtubeChannels !== 'undefined' && youtubeChannels.length > 0) { %>
                         <button type="button" onclick="toggleEditChannelSelector()" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors text-sm flex-shrink-0">
                           <i class="ti ti-switch-horizontal mr-1"></i>Change
                         </button>
                         <% } %>
                       </div>
-                      <% if (typeof youtubeChannels !== 'undefined' && youtubeChannels.length > 1) { %>
+                      <% if (typeof youtubeChannels !== 'undefined' && youtubeChannels.length > 0) { %>
                       <div id="editChannelSelectorDropdown" class="hidden mt-3 pt-3 border-t border-gray-700 space-y-2">
                         <% youtubeChannels.forEach(function(channel) { %>
                         <button type="button" onclick="selectEditYtChannel('<%= channel.id %>', '<%= channel.channel_name %>', '<%= channel.channel_thumbnail %>', '<%= channel.subscriber_count %>')"
@@ -1221,6 +1173,55 @@
                         <p class="text-xs text-gray-500">Recommended: 1280x720</p>
                       </div>
                     </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="mt-6 pt-4 border-t border-gray-700 space-y-4">
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div class="h-[42px] flex items-center gap-2">
+                    <label class="text-sm text-gray-200">Enable Schedule</label>
+                    <span id="editYtServerTimeDisplay" class="bg-gray-700 text-xs text-gray-300 px-2 py-0.5 rounded">loading...</span>
+                    <label class="relative inline-flex items-center cursor-pointer ml-2">
+                      <input type="checkbox" id="editYtEnableSchedule" class="sr-only peer">
+                      <div class="w-11 h-6 bg-dark-900 border border-gray-600 rounded-full peer peer-checked:bg-primary peer-checked:border-primary"></div>
+                      <div class="absolute left-[2px] top-[2px] w-5 h-5 bg-white rounded-full transition-all peer-checked:translate-x-5"></div>
+                    </label>
+                  </div>
+                  <div class="h-[42px] flex items-center gap-2">
+                    <label class="text-sm text-gray-200 flex items-center gap-1"><i class="ti ti-infinity text-primary"></i>Live Nonstop</label>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                      <input type="checkbox" id="editYtNonstopMode" class="sr-only peer">
+                      <div class="w-11 h-6 bg-dark-900 border border-gray-600 rounded-full peer peer-checked:bg-primary peer-checked:border-primary"></div>
+                      <div class="absolute left-[2px] top-[2px] w-5 h-5 bg-white rounded-full transition-all peer-checked:translate-x-5"></div>
+                    </label>
+                  </div>
+                </div>
+                <p id="editYtNonstopHint" class="hidden text-[11px] text-gray-500 -mt-2">Live Nonstop: loops forever, no end time, restarts itself if it drops. Turns Enable Schedule off.</p>
+
+                <div id="editYtAdPanelContainer"></div>
+                <div id="editYtLangPanelContainer"></div>
+
+                <div id="editYtScheduleSettings" class="hidden grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label class="text-xs text-gray-400 block mb-1">Start Time</label>
+                    <input type="datetime-local" id="editYtScheduleStart" name="ytScheduleStart" class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white [color-scheme:dark]">
+                  </div>
+                  <div>
+                    <label class="text-xs text-gray-400 mb-1 flex items-center">
+                      <span>End Time</span>
+                      <span id="editYtDurationBadge" class="ml-2 bg-gray-700 text-xs text-gray-300 px-2 py-0.5 rounded hidden">00:00</span>
+                    </label>
+                    <input type="datetime-local" id="editYtScheduleEnd" name="ytScheduleEnd" class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white [color-scheme:dark]">
+                  </div>
+                  <div>
+                    <label class="text-xs text-gray-400 block mb-1">Repeat</label>
+                    <select id="editYtRepeatMode" name="repeatMode" class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white">
+                      <option value="none" selected>Once</option>
+                      <option value="daily">Every day (same time)</option>
+                      <option value="weekly">Every week</option>
+                    </select>
+                    <p class="text-[11px] text-gray-500 mt-1">After the end time the stream is re-scheduled automatically with a fresh broadcast.</p>
                   </div>
                 </div>
               </div>
