@@ -3690,10 +3690,21 @@
     }
     function closeEditStreamModal() {
       const modal = document.getElementById('editStreamModal');
-      
+
       modal.classList.remove('active');
-      
+
       resetEditModalForm();
+
+      // Belt-and-suspenders: whatever happened during the last submit, the Save
+      // button should never come back stuck showing "Saving..." next time the
+      // modal opens - form.reset() (in resetEditModalForm) doesn't touch a
+      // button's innerHTML/disabled state, only actual form field values.
+      const editSaveBtn = document.querySelector('#editStreamModal button[type="submit"]');
+      if (editSaveBtn) {
+        editSaveBtn.innerHTML = 'Save Changes';
+        editSaveBtn.disabled = false;
+        editSaveBtn.classList.remove('opacity-70', 'cursor-not-allowed');
+      }
       
       const editDurationBadge = document.getElementById('editDurationBadge');
       if (editDurationBadge) editDurationBadge.classList.add('hidden');
@@ -4048,13 +4059,13 @@
               })
                 .then(response => response.json())
                 .then(data => {
+                  resetSaveBtn();
                   if (data.success) {
                     showToast('success', 'Stream updated successfully!');
                     closeEditStreamModal();
                     refreshStreamsView();
                   } else {
                     showToast('error', data.error || 'Failed to update stream');
-                    resetSaveBtn();
                   }
                 })
                 .catch(error => {
@@ -4073,13 +4084,13 @@
               })
                 .then(response => response.json())
                 .then(data => {
+                  resetSaveBtn();
                   if (data.success) {
                     showToast('success', 'Stream updated successfully!');
                     closeEditStreamModal();
                     refreshStreamsView();
                   } else {
                     showToast('error', data.error || 'Failed to update stream');
-                    resetSaveBtn();
                   }
                 })
                 .catch(error => {
