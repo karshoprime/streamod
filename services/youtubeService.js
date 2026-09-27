@@ -361,7 +361,14 @@ async function resolveKeyStream(youtube, { userId, channelId, name, fallbackTitl
         resolution: '1080p'
       },
       contentDetails: {
-        isReusable: false
+        // This is exactly what "Stream Name (key stream)" is for: rebind the SAME
+        // ingestion key across multiple broadcasts. isReusable: false tells YouTube
+        // the opposite - single-use only, and (per the API) not surfaced as a
+        // manageable key in YouTube Studio at all, which is why it was showing up
+        // there as an anonymous "auto-created" key instead of "Live_02". Rotations
+        // never set this flag (so it defaults to reusable) and don't have this
+        // problem - matching that here.
+        isReusable: true
       }
     }
   });
