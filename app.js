@@ -3939,10 +3939,23 @@ app.put('/api/streams/:id', isAuthenticated, uploadThumbnail.single('thumbnail')
       } else if (req.body.scheduleStartTime) {
         const scheduleStartDate = parseScheduleDateTime(req.body.scheduleStartTime);
         updateData.schedule_time = scheduleStartDate.toISOString();
-        updateData.status = 'scheduled';
+        // Don't clobber a currently-live stream's status back to 'scheduled' just
+        // because its (possibly untouched, re-submitted) Start Time field is still
+        // present in the form - that mislabels an active broadcast, which then makes
+        // the 15s scheduler sweep think it's due to start and kick off a redundant
+        // restart cycle on top of the one already running.
+        if (stream.status !== 'live') {
+          updateData.status = 'scheduled';
+        }
 
         if (req.body.scheduleEndTime) {
           const scheduleEndDate = parseScheduleDateTime(req.body.scheduleEndTime);
+          if (scheduleEndDate <= scheduleStartDate) {
+            return res.status(400).json({
+              success: false,
+              error: 'End time must be after start time'
+            });
+          }
           updateData.end_time = scheduleEndDate.toISOString();
         } else if ('scheduleEndTime' in req.body && !req.body.scheduleEndTime) {
           updateData.end_time = null;
@@ -4215,18 +4228,24 @@ app.put('/api/streams/:id', isAuthenticated, uploadThumbnail.single('thumbnail')
     } else if (req.body.scheduleStartTime) {
       const scheduleStartDate = parseLocalDateTime(req.body.scheduleStartTime);
       updateData.schedule_time = scheduleStartDate.toISOString();
-      updateData.status = 'scheduled';
+      // Same reasoning as the YouTube-mode branch above: a currently-live stream
+      // shouldn't be relabeled 'scheduled' just because the form's (possibly
+      // untouched) Start Time field is still present - that mislabels an active
+      // stream and makes the scheduler think it's newly due to start.
+      if (stream.status !== 'live') {
+        updateData.status = 'scheduled';
+      }
 
       if (req.body.scheduleEndTime) {
         const scheduleEndDate = parseLocalDateTime(req.body.scheduleEndTime);
-        
+
         if (scheduleEndDate <= scheduleStartDate) {
-          return res.status(400).json({ 
-            success: false, 
-            error: 'End time must be after start time' 
+          return res.status(400).json({
+            success: false,
+            error: 'End time must be after start time'
           });
         }
-        
+
         updateData.end_time = scheduleEndDate.toISOString();
         const durationMs = scheduleEndDate - scheduleStartDate;
         const durationMinutes = Math.round(durationMs / (1000 * 60));
@@ -4237,8 +4256,10 @@ app.put('/api/streams/:id', isAuthenticated, uploadThumbnail.single('thumbnail')
       }
     } else if ('scheduleStartTime' in req.body && !req.body.scheduleStartTime) {
       updateData.schedule_time = null;
-      updateData.status = 'offline';
-      
+      if (stream.status !== 'live') {
+        updateData.status = 'offline';
+      }
+
       if (req.body.scheduleEndTime) {
         const scheduleEndDate = parseLocalDateTime(req.body.scheduleEndTime);
         updateData.end_time = scheduleEndDate.toISOString();
