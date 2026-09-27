@@ -670,10 +670,36 @@ async function createYouTubeBroadcastInner(streamId, baseUrl) {
 async function deleteYouTubeBroadcast(streamId) {
   try {
     loggedAlreadyHasBroadcast.delete(streamId);
-    
+
     const stream = await Stream.findById(streamId);
     if (!stream || !stream.is_youtube_api || !stream.youtube_broadcast_id) {
       return { success: true, message: 'No YouTube broadcast to clean up' };
+    }
+
+    // Best-effort: tell YouTube the broadcast is actually done instead of just
+    // abandoning it. A broadcast that never received real RTMP data (e.g. this
+    // stream got killed within seconds of starting) never auto-transitions out
+    // of "ready"/"testing" on its own, and a key stream that keeps getting bound
+    // to broadcasts that are never cleanly closed out is exactly the kind of
+    // thing that leaves its ingestion state looking stale in YouTube Studio.
+    try {
+      const { youtube } = await getYouTubeClientForStream(stream);
+      const currentResp = await youtube.liveBroadcasts.list({
+        part: 'id,status',
+        id: stream.youtube_broadcast_id
+      });
+      const current = currentResp.data.items?.[0];
+      const lifeCycleStatus = current?.status?.lifeCycleStatus || null;
+      if (current && !['complete', 'revoked'].includes(lifeCycleStatus)) {
+        await youtube.liveBroadcasts.transition({
+          broadcastStatus: 'complete',
+          id: stream.youtube_broadcast_id,
+          part: 'id,status'
+        });
+        console.log(`[YouTubeService] Transitioned broadcast ${stream.youtube_broadcast_id} to complete`);
+      }
+    } catch (transitionError) {
+      console.log(`Note: Could not transition broadcast ${stream.youtube_broadcast_id} to complete: ${transitionError.message}`);
     }
 
     await Stream.update(streamId, {
