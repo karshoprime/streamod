@@ -3981,7 +3981,49 @@ app.put('/api/streams/:id', isAuthenticated, uploadThumbnail.single('thumbnail')
             if (selectedChannel && selectedChannel.access_token) {
               const { getYouTubeClientForChannel } = require('./services/youtubeService');
               const youtube = getYouTubeClientForChannel(user, selectedChannel, getRequestRedirectUri(req));
-              
+
+              // A stream that's already live/created has a real YouTube ingestion
+              // resource bound to it (stream.youtube_stream_id). Renaming its "Stream
+              // Name (key stream)" field here should keep pointing at that SAME
+              // resource - like a rotation, whose key stream identity is tied to a
+              // stable id rather than re-resolved by name - instead of silently doing
+              // nothing until the next broadcast creation, which would look the new
+              // name up fresh and spin up an unrelated ingestion key under it.
+              if (stream.youtube_stream_id && req.body.keyStreamName !== undefined) {
+                const newKeyStreamName = parseKeyStreamName(req.body.keyStreamName);
+                if (newKeyStreamName && newKeyStreamName !== stream.key_stream_name) {
+                  try {
+                    const StreamKey = require('./models/StreamKey');
+                    const existingKey = await StreamKey.findByName(req.session.userId, selectedChannel.id, newKeyStreamName);
+                    if (existingKey) {
+                      await StreamKey.update(existingKey.id, {
+                        youtubeStreamId: stream.youtube_stream_id,
+                        youtubeStreamKey: stream.stream_key,
+                        youtubeRtmpUrl: stream.rtmp_url
+                      });
+                    } else {
+                      await StreamKey.create({
+                        userId: req.session.userId,
+                        channelId: selectedChannel.id,
+                        name: newKeyStreamName,
+                        youtubeStreamId: stream.youtube_stream_id,
+                        youtubeStreamKey: stream.stream_key,
+                        youtubeRtmpUrl: stream.rtmp_url
+                      });
+                    }
+                    await youtube.liveStreams.update({
+                      part: 'snippet',
+                      requestBody: {
+                        id: stream.youtube_stream_id,
+                        snippet: { title: newKeyStreamName }
+                      }
+                    });
+                  } catch (keyStreamError) {
+                    console.log('Note: Could not save/rename key stream:', keyStreamError.message);
+                  }
+                }
+              }
+
               const broadcastUpdateData = {
                 id: stream.youtube_broadcast_id,
                 snippet: {
@@ -4090,6 +4132,21 @@ app.put('/api/streams/:id', isAuthenticated, uploadThumbnail.single('thumbnail')
       applyRepeatToUpdate(req, stream, updateData);
       applyNonstopToUpdate(req, updateData);
       await Stream.update(req.params.id, updateData);
+
+      // Switching a stream to Live Nonstop mid-broadcast clears its schedule going
+      // forward (checkStreamDurations skips anything with no end_time), but if we were
+      // already inside the last-30-minutes safety window, YouTube's own enableAutoStop
+      // may already be turned on for this broadcast. Turn it back off and drop any
+      // scheduler state tied to the old schedule so a brief reconnect blip doesn't let
+      // YouTube end the broadcast out from under a stream that's supposed to loop forever.
+      if (updateData.nonstop === true && stream.is_youtube_api && stream.youtube_broadcast_id) {
+        schedulerService.handleStreamStopped(req.params.id);
+        try {
+          const youtubeService = require('./services/youtubeService');
+          youtubeService.updateBroadcastAutoStop(req.params.id, false).catch(() => {});
+        } catch (e) { /* youtubeService not usable - skip silently */ }
+      }
+
       return res.json({ success: true, message: 'Stream updated successfully' });
     }
     

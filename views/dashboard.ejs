@@ -2250,7 +2250,7 @@
         <div class="flex items-center gap-1.5">
           ${getActionButtonHTML(stream.status, stream.id, 'mobile')}
           ${getMonetizationButtonHTML(stream, 'mobile')}
-          <button class="p-1 hover:bg-dark-700 rounded transition-colors ${stream.status === 'live' || stream.status === 'scheduled' ? 'opacity-50 cursor-not-allowed' : ''}" onclick="${stream.status === 'live' || stream.status === 'scheduled' ? '' : `editStream('${stream.id}')`}" ${stream.status === 'live' || stream.status === 'scheduled' ? 'disabled' : ''}><i class="ti ti-edit text-gray-400 hover:text-white text-sm"></i></button>
+          <button class="p-1 hover:bg-dark-700 rounded transition-colors ${stream.status === 'scheduled' ? 'opacity-50 cursor-not-allowed' : ''}" onclick="${stream.status === 'scheduled' ? '' : `editStream('${stream.id}')`}" ${stream.status === 'scheduled' ? 'disabled' : ''}><i class="ti ti-edit text-gray-400 hover:text-white text-sm"></i></button>
           <button class="p-1 hover:bg-dark-700 rounded transition-colors ${stream.status === 'live' || stream.status === 'scheduled' ? 'opacity-50 cursor-not-allowed' : ''}" onclick="${stream.status === 'live' || stream.status === 'scheduled' ? '' : `deleteStream('${stream.id}')`}" ${stream.status === 'live' || stream.status === 'scheduled' ? 'disabled' : ''}><i class="ti ti-trash text-gray-400 hover:text-red-400 text-sm"></i></button>
         </div>
       </div>
@@ -2388,9 +2388,9 @@
           ${getActionButtonHTML(stream.status, stream.id, 'desktop')}
           <div class="ml-2 flex items-center gap-1">
             ${getMonetizationButtonHTML(stream, 'desktop')}
-            <button class="p-1.5 hover:bg-dark-700 rounded transition-colors ${stream.status === 'live' || stream.status === 'scheduled' ? 'opacity-50 cursor-not-allowed' : ''}" 
-                    onclick="${stream.status === 'live' || stream.status === 'scheduled' ? '' : `editStream('${stream.id}')`}"
-                    ${stream.status === 'live' || stream.status === 'scheduled' ? 'disabled' : ''}>
+            <button class="p-1.5 hover:bg-dark-700 rounded transition-colors ${stream.status === 'scheduled' ? 'opacity-50 cursor-not-allowed' : ''}"
+                    onclick="${stream.status === 'scheduled' ? '' : `editStream('${stream.id}')`}"
+                    ${stream.status === 'scheduled' ? 'disabled' : ''}>
               <i class="ti ti-edit text-gray-400 hover:text-white"></i>
             </button>
             <button class="p-1.5 hover:bg-dark-700 rounded transition-colors ${stream.status === 'live' || stream.status === 'scheduled' ? 'opacity-50 cursor-not-allowed' : ''}" 
