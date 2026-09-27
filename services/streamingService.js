@@ -1037,7 +1037,17 @@ async function gracefulShutdown() {
 
       const stream = await Stream.findById(streamId);
       if (stream) {
-        await Stream.updateStatus(streamId, 'offline', stream.user_id);
+        // This only runs on process shutdown (SIGINT/SIGTERM - i.e. every `pm2
+        // restart`/deploy), never on a real user-initiated Stop (that's
+        // stopStream(), a separate function). A plain updateStatus('offline')
+        // here nulls out schedule_time/end_time/start_time - which is exactly
+        // the information the next boot (and the scheduler's stalled-stream
+        // watchdog) needs to know this stream should come back up. Losing it
+        // here meant a live, still-within-schedule stream could never resume
+        // after a restart: by the time the new process started, the very
+        // field it checks had already been wiped by this old process on its
+        // way out.
+        await Stream.updateStatus(streamId, 'offline', stream.user_id, { preserveEndTime: true });
       }
 
       activeStreams.delete(streamId);
