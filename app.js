@@ -4006,31 +4006,84 @@ app.put('/api/streams/:id', isAuthenticated, uploadThumbnail.single('thumbnail')
                 const newKeyStreamName = parseKeyStreamName(req.body.keyStreamName);
                 if (newKeyStreamName && newKeyStreamName !== stream.key_stream_name) {
                   try {
+                    // contentDetails.isReusable is immutable once a key stream is created.
+                    // A key stream created before the isReusable fix (or any other
+                    // isReusable:false stream) can NEVER be renamed into visibility in
+                    // YouTube Studio - it stays an anonymous "auto-created" key forever,
+                    // no matter what title we PATCH onto it. Check the flag before deciding
+                    // whether an in-place rename is actually possible.
+                    let currentIsReusable = true;
+                    try {
+                      const currentResp = await youtube.liveStreams.list({
+                        part: 'contentDetails',
+                        id: stream.youtube_stream_id
+                      });
+                      const currentLiveStream = currentResp.data.items?.[0];
+                      currentIsReusable = currentLiveStream?.contentDetails?.isReusable !== false;
+                    } catch (checkErr) {
+                      console.log('Note: Could not check key stream reusable flag:', checkErr.message);
+                    }
+
                     const StreamKey = require('./models/StreamKey');
-                    const existingKey = await StreamKey.findByName(req.session.userId, selectedChannel.id, newKeyStreamName);
-                    if (existingKey) {
-                      await StreamKey.update(existingKey.id, {
-                        youtubeStreamId: stream.youtube_stream_id,
-                        youtubeStreamKey: stream.stream_key,
-                        youtubeRtmpUrl: stream.rtmp_url
+
+                    if (currentIsReusable) {
+                      // Same visible key stream - just rename it in place, same RTMP url/key.
+                      const existingKey = await StreamKey.findByName(req.session.userId, selectedChannel.id, newKeyStreamName);
+                      if (existingKey) {
+                        await StreamKey.update(existingKey.id, {
+                          youtubeStreamId: stream.youtube_stream_id,
+                          youtubeStreamKey: stream.stream_key,
+                          youtubeRtmpUrl: stream.rtmp_url
+                        });
+                      } else {
+                        await StreamKey.create({
+                          userId: req.session.userId,
+                          channelId: selectedChannel.id,
+                          name: newKeyStreamName,
+                          youtubeStreamId: stream.youtube_stream_id,
+                          youtubeStreamKey: stream.stream_key,
+                          youtubeRtmpUrl: stream.rtmp_url
+                        });
+                      }
+                      await youtube.liveStreams.update({
+                        part: 'snippet',
+                        requestBody: {
+                          id: stream.youtube_stream_id,
+                          snippet: { title: newKeyStreamName }
+                        }
                       });
                     } else {
-                      await StreamKey.create({
+                      // Old non-reusable key stream - can't be fixed in place. Resolve
+                      // (reuse-by-name if one already exists under this name, otherwise
+                      // freshly create - always isReusable:true) a real key stream and
+                      // rebind the broadcast to it. NOTE: this changes the RTMP URL/
+                      // stream key, so the encoder (OBS etc.) needs to be updated.
+                      const { resolveKeyStream } = require('./services/youtubeService');
+                      const keyStream = await resolveKeyStream(youtube, {
                         userId: req.session.userId,
                         channelId: selectedChannel.id,
                         name: newKeyStreamName,
-                        youtubeStreamId: stream.youtube_stream_id,
-                        youtubeStreamKey: stream.stream_key,
-                        youtubeRtmpUrl: stream.rtmp_url
+                        fallbackTitle: stream.title
                       });
-                    }
-                    await youtube.liveStreams.update({
-                      part: 'snippet',
-                      requestBody: {
-                        id: stream.youtube_stream_id,
-                        snippet: { title: newKeyStreamName }
+
+                      if (stream.youtube_broadcast_id) {
+                        try {
+                          await youtube.liveBroadcasts.bind({
+                            part: 'id,contentDetails',
+                            id: stream.youtube_broadcast_id,
+                            streamId: keyStream.streamId
+                          });
+                        } catch (bindErr) {
+                          console.log('Note: Could not rebind broadcast to new key stream:', bindErr.message);
+                        }
                       }
-                    });
+
+                      updateData.youtube_stream_id = keyStream.streamId;
+                      updateData.rtmp_url = keyStream.rtmpUrl;
+                      updateData.stream_key = keyStream.streamKey;
+
+                      console.log(`[App] Key stream "${newKeyStreamName}" for stream ${stream.id} was not reusable (old key) - created a fresh reusable key stream (${keyStream.streamId}). RTMP URL/stream key changed, encoder needs updating.`);
+                    }
                   } catch (keyStreamError) {
                     console.log('Note: Could not save/rename key stream:', keyStreamError.message);
                   }

@@ -796,5 +796,6 @@ module.exports = {
   handleYouTubeAuthError,
   isInvalidGrantError,
   insertAdBreak,
-  applyBroadcastLocalizations
+  applyBroadcastLocalizations,
+  resolveKeyStream
 };
