@@ -3902,6 +3902,13 @@ app.put('/api/streams/:id', isAuthenticated, uploadThumbnail.single('thumbnail')
       if (req.body.keyStreamName !== undefined) {
         updateData.key_stream_name = parseKeyStreamName(req.body.keyStreamName);
       }
+      if (req.body.ytChannelId) {
+        const YoutubeChannel = require('./models/YoutubeChannel');
+        const chosenChannel = await YoutubeChannel.findById(req.body.ytChannelId);
+        if (chosenChannel && chosenChannel.user_id === req.session.userId) {
+          updateData.youtube_channel_id = req.body.ytChannelId;
+        }
+      }
       const { normalizeAdSettings } = require('./services/adSettings');
       const { sanitizeLanguageList, isValidLanguage } = require('./config/youtubeLanguages');
 
@@ -3966,7 +3973,7 @@ app.put('/api/streams/:id', isAuthenticated, uploadThumbnail.single('thumbnail')
           const user = await User.findById(req.session.userId);
           if (user.youtube_client_id && user.youtube_client_secret) {
             const YoutubeChannel = require('./models/YoutubeChannel');
-            let selectedChannel = await YoutubeChannel.findById(stream.youtube_channel_id);
+            let selectedChannel = await YoutubeChannel.findById(updateData.youtube_channel_id || stream.youtube_channel_id);
             if (!selectedChannel) {
               selectedChannel = await YoutubeChannel.findDefault(req.session.userId);
             }
