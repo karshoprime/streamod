@@ -4,10 +4,18 @@ const scheduledTerminations = new Map();
 // Dedupe so we only push the "enable YouTube auto-stop" update once per stream,
 // not on every 30s poll while inside the last-stretch-before-End-Time window.
 const autoStopFlipped = new Set();
+// Cooldown after a failed (re)start attempt, shared by checkScheduledStreams and
+// checkStalledScheduledStreams, so a persistently broken stream (bad channel token,
+// etc.) fails once per cooldown window instead of hammering the YouTube API and the
+// logs every 15s forever.
+const recentStartFailures = new Map(); // streamId -> timestamp of last failure
+const START_FAILURE_COOLDOWN_MS = 2 * 60 * 1000;
 const SCHEDULE_CHECK_INTERVAL = 15000;
 const DURATION_CHECK_INTERVAL = 30000;
 const RECURRING_CHECK_INTERVAL = 60000;
+const STALLED_CHECK_INTERVAL = 20000;
 let recurringIntervalId = null;
+let stalledIntervalId = null;
 
 let streamingService = null;
 let initialized = false;
@@ -26,10 +34,17 @@ function init(streamingServiceInstance) {
   scheduleIntervalId = setInterval(checkScheduledStreams, SCHEDULE_CHECK_INTERVAL);
   durationIntervalId = setInterval(checkStreamDurations, DURATION_CHECK_INTERVAL);
   recurringIntervalId = setInterval(checkRecurringStreams, RECURRING_CHECK_INTERVAL);
+  stalledIntervalId = setInterval(checkStalledScheduledStreams, STALLED_CHECK_INTERVAL);
 
   checkScheduledStreams();
   checkStreamDurations();
+  checkStalledScheduledStreams();
   setTimeout(checkRecurringStreams, 5000);
+}
+
+function canAttemptStart(streamId) {
+  const lastFailure = recentStartFailures.get(streamId);
+  return !lastFailure || (Date.now() - lastFailure) >= START_FAILURE_COOLDOWN_MS;
 }
 
 /**
@@ -111,6 +126,10 @@ async function checkScheduledStreams() {
         continue;
       }
 
+      if (!canAttemptStart(stream.id)) {
+        continue;
+      }
+
       const currentStream = await Stream.findById(stream.id);
       if (!currentStream || currentStream.status !== 'scheduled') {
         continue;
@@ -121,10 +140,67 @@ async function checkScheduledStreams() {
 
       if (!result.success) {
         console.error(`[Scheduler] Failed to start stream ${stream.id}: ${result.error}`);
+        recentStartFailures.set(stream.id, Date.now());
+      } else {
+        recentStartFailures.delete(stream.id);
       }
     }
   } catch (error) {
     console.error('[Scheduler] Error checking scheduled streams:', error);
+  }
+}
+
+/**
+ * Self-healing watchdog for scheduled (non-nonstop) streams. Rotation already gets
+ * this behavior for free - checkRotations() recomputes what should be running from
+ * the rotation's own schedule every 60s, so a process restart never permanently
+ * loses one. Plain Stream resume, by contrast, only happened once at boot (see
+ * app.js), so if that one-shot check missed a stream - a race at startup, FFmpeg
+ * dying moments after boot before the retry logic re-armed, several restarts in
+ * quick succession, etc. - it was simply abandoned offline for the rest of its
+ * schedule window with nothing to bring it back.
+ *
+ * This runs continuously (not just at boot) and picks up any stream that is
+ * 'offline' while still genuinely inside its own Start/End window. It's safe to
+ * run repeatedly because a real manual Stop fully clears schedule_time/end_time/
+ * start_time (see streamingService.stopStream's plain updateStatus(id, 'offline')
+ * call, no preserveEndTime) - so a deliberately-stopped stream never matches the
+ * "still within window" condition below and is left alone. Nonstop streams are
+ * intentionally NOT included here: they already resume unconditionally at boot,
+ * and reviving one on a schedule-window heuristic risks fighting an intentional
+ * manual stop (nonstop has no end_time to signal that a stop was intentional).
+ */
+async function checkStalledScheduledStreams() {
+  try {
+    if (!streamingService) return;
+
+    const offlineStreams = await Stream.findAll(null, 'offline');
+    const now = new Date();
+
+    for (const stream of offlineStreams) {
+      if (stream.nonstop) continue;
+      if (!stream.start_time || !stream.end_time) continue;
+      if (streamingService.isStreamActive(stream.id) || streamingService.isStreamStarting(stream.id)) continue;
+      if (!canAttemptStart(stream.id)) continue;
+
+      const startTime = new Date(stream.start_time);
+      const endTime = new Date(stream.end_time);
+      if (Number.isNaN(startTime.getTime()) || Number.isNaN(endTime.getTime())) continue;
+      if (!(startTime <= now && endTime > now)) continue;
+
+      console.log(`[Scheduler] Stream "${stream.title}" (${stream.id}) is offline but still within its Start/End window - resuming`);
+      const baseUrl = process.env.BASE_URL || 'http://localhost:7575';
+      const result = await streamingService.startStream(stream.id, false, baseUrl);
+
+      if (!result.success) {
+        console.error(`[Scheduler] Failed to resume stalled stream ${stream.id}: ${result.error}`);
+        recentStartFailures.set(stream.id, Date.now());
+      } else {
+        recentStartFailures.delete(stream.id);
+      }
+    }
+  } catch (error) {
+    console.error('[Scheduler] Error checking stalled scheduled streams:', error);
   }
 }
 
@@ -247,6 +323,7 @@ function getScheduledTermination(streamId) {
 
 function handleStreamStopped(streamId) {
   autoStopFlipped.delete(streamId);
+  recentStartFailures.delete(streamId);
   return cancelStreamTermination(streamId);
 }
 
@@ -260,6 +337,9 @@ function shutdown() {
   if (recurringIntervalId) {
     clearInterval(recurringIntervalId);
   }
+  if (stalledIntervalId) {
+    clearInterval(stalledIntervalId);
+  }
 
   for (const [streamId, scheduled] of scheduledTerminations) {
     if (scheduled.timeoutId) {
@@ -268,6 +348,7 @@ function shutdown() {
   }
   scheduledTerminations.clear();
   autoStopFlipped.clear();
+  recentStartFailures.clear();
 }
 
 module.exports = {
@@ -279,6 +360,7 @@ module.exports = {
   checkScheduledStreams,
   checkStreamDurations,
   checkRecurringStreams,
+  checkStalledScheduledStreams,
   getNextOccurrence,
   shutdown
 };
