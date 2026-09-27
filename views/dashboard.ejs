@@ -1115,43 +1115,6 @@
                       <span id="editYtTagsCharCount" class="text-xs text-gray-500">0/500</span>
                     </div>
                   </div>
-                </div>
-
-                <div class="space-y-4">
-                  <div>
-                    <label class="text-xs text-gray-400 block mb-1">YouTube Channel</label>
-                    <div class="bg-dark-900 rounded-lg p-3 border border-gray-700">
-                      <div class="flex items-center justify-between gap-3">
-                        <div class="flex items-center gap-3 min-w-0">
-                          <div class="w-10 h-10 rounded-full overflow-hidden bg-gray-700 flex-shrink-0">
-                            <img id="editYtChannelThumb" src="<%= typeof youtubeChannelThumbnail !== 'undefined' ? youtubeChannelThumbnail : '' %>" alt="Channel" class="w-full h-full object-cover" onerror="this.parentElement.innerHTML='<div class=\'w-full h-full flex items-center justify-center bg-red-600\'><i class=\'ti ti-brand-youtube text-white text-xl\'></i></div>'">
-                          </div>
-                          <div class="min-w-0">
-                            <p id="editYtChannelNameDisplay" class="font-medium text-white text-sm truncate"><%= typeof youtubeChannelName !== 'undefined' ? youtubeChannelName : 'YouTube Channel' %></p>
-                            <p id="editYtChannelSubsDisplay" class="text-xs text-gray-400"><%= typeof youtubeSubscriberCount !== 'undefined' ? Number(youtubeSubscriberCount).toLocaleString() : '0' %> subscribers</p>
-                          </div>
-                        </div>
-
-                      </div>
-
-                    </div>
-                    <input type="hidden" id="editYtSelectedChannelId" name="ytChannelId" value="<%= typeof youtubeChannels !== 'undefined' && youtubeChannels.length > 0 ? (youtubeChannels.find(c => c.is_default) || youtubeChannels[0]).id : '' %>">
-                  </div>
-
-                  <div>
-                    <label class="text-xs text-gray-400 block mb-1">Thumbnail</label>
-                    <div class="border-2 border-dashed border-gray-600 rounded-lg p-4 text-center hover:border-primary transition-colors cursor-pointer" onclick="document.getElementById('editYtThumbnail').click()">
-                      <input type="file" id="editYtThumbnail" name="editYtThumbnail" accept="image/*" class="hidden">
-                      <div id="editYtThumbnailPreview" class="hidden">
-                        <img id="editYtThumbnailImg" src="" alt="Thumbnail" class="max-h-32 mx-auto rounded">
-                      </div>
-                      <div id="editYtThumbnailPlaceholder">
-                        <i class="ti ti-photo text-3xl text-gray-500 mb-2"></i>
-                        <p class="text-sm text-gray-400">Click to upload thumbnail</p>
-                        <p class="text-xs text-gray-500">Recommended: 1280x720</p>
-                      </div>
-                    </div>
-                  </div>
 
                   <div class="h-[42px] flex items-center justify-between">
                     <div class="flex items-center gap-2">
@@ -1191,14 +1154,73 @@
                       <input type="datetime-local" id="editYtScheduleEnd" name="ytScheduleEnd" class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white [color-scheme:dark]">
                     </div>
                     <div>
-                  <label class="text-xs text-gray-400 block mb-1">Repeat</label>
-                  <select id="editYtRepeatMode" name="repeatMode" class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white">
-                    <option value="none" selected>Once</option>
-                    <option value="daily">Every day (same time)</option>
-                    <option value="weekly">Every week</option>
-                  </select>
-                  <p class="text-[11px] text-gray-500 mt-1">After the end time the stream is re-scheduled automatically with a fresh broadcast.</p>
+                      <label class="text-xs text-gray-400 block mb-1">Repeat</label>
+                      <select id="editYtRepeatMode" name="repeatMode" class="w-full px-3 py-2 bg-dark-900 border border-gray-600 rounded-lg focus:border-primary focus:ring-1 focus:ring-primary text-sm text-white">
+                        <option value="none" selected>Once</option>
+                        <option value="daily">Every day (same time)</option>
+                        <option value="weekly">Every week</option>
+                      </select>
+                      <p class="text-[11px] text-gray-500 mt-1">After the end time the stream is re-scheduled automatically with a fresh broadcast.</p>
+                    </div>
+                  </div>
                 </div>
+
+                <div class="space-y-4">
+                  <div>
+                    <label class="text-xs text-gray-400 block mb-1">YouTube Channel</label>
+                    <div class="bg-dark-900 rounded-lg p-3 border border-gray-700">
+                      <div class="flex items-center justify-between gap-3">
+                        <div class="flex items-center gap-3 min-w-0">
+                          <div class="w-10 h-10 rounded-full overflow-hidden bg-gray-700 flex-shrink-0">
+                            <img id="editYtChannelThumb" src="<%= typeof youtubeChannelThumbnail !== 'undefined' ? youtubeChannelThumbnail : '' %>" alt="Channel" class="w-full h-full object-cover" onerror="this.parentElement.innerHTML='<div class=\'w-full h-full flex items-center justify-center bg-red-600\'><i class=\'ti ti-brand-youtube text-white text-xl\'></i></div>'">
+                          </div>
+                          <div class="min-w-0">
+                            <p id="editYtChannelNameDisplay" class="font-medium text-white text-sm truncate"><%= typeof youtubeChannelName !== 'undefined' ? youtubeChannelName : 'YouTube Channel' %></p>
+                            <p id="editYtChannelSubsDisplay" class="text-xs text-gray-400"><%= typeof youtubeSubscriberCount !== 'undefined' ? Number(youtubeSubscriberCount).toLocaleString() : '0' %> subscribers</p>
+                          </div>
+                        </div>
+                        <% if (typeof youtubeChannels !== 'undefined' && youtubeChannels.length > 1) { %>
+                        <button type="button" onclick="toggleEditChannelSelector()" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors text-sm flex-shrink-0">
+                          <i class="ti ti-switch-horizontal mr-1"></i>Change
+                        </button>
+                        <% } %>
+                      </div>
+                      <% if (typeof youtubeChannels !== 'undefined' && youtubeChannels.length > 1) { %>
+                      <div id="editChannelSelectorDropdown" class="hidden mt-3 pt-3 border-t border-gray-700 space-y-2">
+                        <% youtubeChannels.forEach(function(channel) { %>
+                        <button type="button" onclick="selectEditYtChannel('<%= channel.id %>', '<%= channel.channel_name %>', '<%= channel.channel_thumbnail %>', '<%= channel.subscriber_count %>')"
+                          class="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-gray-700 transition-colors text-left edit-channel-option" data-channel-id="<%= channel.id %>">
+                          <div class="w-8 h-8 rounded-full overflow-hidden bg-gray-600 flex-shrink-0">
+                            <img src="<%= channel.channel_thumbnail %>" alt="" class="w-full h-full object-cover" onerror="this.style.display='none'">
+                          </div>
+                          <div class="min-w-0 flex-1">
+                            <p class="text-sm text-white truncate"><%= channel.channel_name %></p>
+                            <p class="text-xs text-gray-400"><%= Number(channel.subscriber_count || 0).toLocaleString() %> subs</p>
+                          </div>
+                          <% if (channel.is_default) { %>
+                          <span class="text-xs text-primary">Default</span>
+                          <% } %>
+                        </button>
+                        <% }); %>
+                      </div>
+                      <% } %>
+                    </div>
+                    <input type="hidden" id="editYtSelectedChannelId" name="ytChannelId" value="<%= typeof youtubeChannels !== 'undefined' && youtubeChannels.length > 0 ? (youtubeChannels.find(c => c.is_default) || youtubeChannels[0]).id : '' %>">
+                  </div>
+
+                  <div>
+                    <label class="text-xs text-gray-400 block mb-1">Thumbnail</label>
+                    <div class="border-2 border-dashed border-gray-600 rounded-lg p-4 text-center hover:border-primary transition-colors cursor-pointer" onclick="document.getElementById('editYtThumbnail').click()">
+                      <input type="file" id="editYtThumbnail" name="editYtThumbnail" accept="image/*" class="hidden">
+                      <div id="editYtThumbnailPreview" class="hidden">
+                        <img id="editYtThumbnailImg" src="" alt="Thumbnail" class="max-h-32 mx-auto rounded">
+                      </div>
+                      <div id="editYtThumbnailPlaceholder">
+                        <i class="ti ti-photo text-3xl text-gray-500 mb-2"></i>
+                        <p class="text-sm text-gray-400">Click to upload thumbnail</p>
+                        <p class="text-xs text-gray-500">Recommended: 1280x720</p>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1417,8 +1439,32 @@
       if (selectedOption) {
         selectedOption.classList.add('bg-gray-700/50', 'selected-channel');
       }
-      
+
       toggleChannelSelector();
+    }
+
+    function toggleEditChannelSelector() {
+      const dropdown = document.getElementById('editChannelSelectorDropdown');
+      if (dropdown) {
+        dropdown.classList.toggle('hidden');
+      }
+    }
+
+    function selectEditYtChannel(channelId, channelName, channelThumbnail, subscriberCount) {
+      document.getElementById('editYtSelectedChannelId').value = channelId;
+      document.getElementById('editYtChannelThumb').src = channelThumbnail;
+      document.getElementById('editYtChannelNameDisplay').textContent = channelName;
+      document.getElementById('editYtChannelSubsDisplay').textContent = Number(subscriberCount || 0).toLocaleString() + ' subscribers';
+
+      document.querySelectorAll('.edit-channel-option').forEach(opt => {
+        opt.classList.remove('bg-gray-700/50', 'selected-channel');
+      });
+      const selectedOption = document.querySelector(`.edit-channel-option[data-channel-id="${channelId}"]`);
+      if (selectedOption) {
+        selectedOption.classList.add('bg-gray-700/50', 'selected-channel');
+      }
+
+      toggleEditChannelSelector();
     }
 
 
