@@ -82,6 +82,38 @@ function getRetryDelay(retryCount) {
   return delay + Math.random() * 1000;
 }
 
+// Codec-copy mode passes audio straight through with the aac_adtstoasc bitstream
+// filter, which only works when the source audio is already AAC. A video with
+// FLAC/Opus/MP3/etc. audio made FFmpeg exit immediately ("Codec 'flac' is not
+// supported by the bitstream filter 'aac_adtstoasc'") and retry forever, so
+// YouTube never received any data. Probe first: keep the cheap copy path for AAC,
+// and re-encode ONLY the audio to AAC otherwise (video stays codec-copy).
+async function allAudioIsAac(filePaths) {
+  let getAudioInfo;
+  try {
+    ({ getAudioInfo } = require('./audioConverter'));
+  } catch (e) {
+    return true; // can't probe - keep previous behavior
+  }
+  for (const fp of filePaths) {
+    try {
+      const info = await getAudioInfo(fp);
+      if (info.codec && info.codec !== 'aac') {
+        return false;
+      }
+    } catch (e) {
+      // Probe failed for this file - don't block the stream over it.
+    }
+  }
+  return true;
+}
+
+function copyModeAudioArgs(audioIsAac) {
+  return audioIsAac
+    ? ['-c:a', 'copy', '-bsf:a', 'aac_adtstoasc']
+    : ['-c:a', 'aac', '-b:a', '192k', '-ar', '44100', '-ac', '2'];
+}
+
 async function buildFFmpegArgsForPlaylist(stream, playlist) {
   if (!playlist.videos || playlist.videos.length === 0) {
     throw new Error('Playlist is empty');
@@ -122,6 +154,10 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
 
   if (!hasAudio) {
     if (!stream.use_advanced_settings) {
+      const audioIsAac = await allAudioIsAac(videoPaths);
+      if (!audioIsAac) {
+        addStreamLog(stream.id, 'Playlist contains non-AAC audio - re-encoding audio to AAC (video stays copy)');
+      }
       return [
         '-nostdin',
         '-loglevel', 'warning',
@@ -133,8 +169,7 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
         '-safe', '0',
         '-i', concatFile,
         '-c:v', 'copy',
-        '-c:a', 'copy',
-        '-bsf:a', 'aac_adtstoasc',
+        ...copyModeAudioArgs(audioIsAac),
         '-f', 'flv',
         '-flvflags', 'no_duration_filesize',
         rtmpUrl
@@ -379,6 +414,10 @@ async function buildFFmpegArgs(stream) {
   const loopValue = stream.loop_video ? '-1' : '0';
 
   if (!stream.use_advanced_settings) {
+    const audioIsAac = await allAudioIsAac([videoPath]);
+    if (!audioIsAac) {
+      addStreamLog(stream.id, 'Video audio is not AAC - re-encoding audio to AAC (video stays copy)');
+    }
     return [
       '-nostdin',
       '-loglevel', 'warning',
@@ -389,8 +428,7 @@ async function buildFFmpegArgs(stream) {
       '-stream_loop', loopValue,
       '-i', videoPath,
       '-c:v', 'copy',
-      '-c:a', 'copy',
-      '-bsf:a', 'aac_adtstoasc',
+      ...copyModeAudioArgs(audioIsAac),
       '-f', 'flv',
       '-flvflags', 'no_duration_filesize',
       rtmpUrl
