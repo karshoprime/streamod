@@ -62,6 +62,9 @@ function addStreamLog(streamId, message) {
   if (logs.length > MAX_LOG_LINES) {
     logs.shift();
   }
+  // Also mirror to console so FFmpeg start/exit/errors show up in `pm2 logs`
+  // (previously these only lived in memory and were invisible from the server).
+  console.log(`[Stream ${String(streamId).slice(0, 8)}] ${message}`);
 }
 
 function getStreamLogs(streamId) {
