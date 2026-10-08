@@ -6,7 +6,7 @@ const { google } = require('googleapis');
 const { decrypt } = require('../utils/encryption');
 const path = require('path');
 const fs = require('fs');
-const { syncBroadcastMonetization, applyBroadcastLocalizations, getYouTubeClientForChannel, handleYouTubeAuthError } = require('./youtubeService');
+const { syncBroadcastMonetization, applyBroadcastLocalizations, getYouTubeClientForChannel, handleYouTubeAuthError, discardUnusedBroadcast } = require('./youtubeService');
 const notificationService = require('./notificationService');
 const { normalizeAdSettings } = require('./adSettings');
 const { sanitizeLanguageList } = require('../config/youtubeLanguages');
@@ -260,6 +260,9 @@ async function checkRotations() {
 async function startRotationStream(rotation, item) {
     let selectedChannel = null;
     let user = null;
+    let youtubeClient = null;
+    let createdBroadcastId = null;
+    let streamRecordCreated = false;
 
   try {
     const user = await User.findById(rotation.user_id);
@@ -294,6 +297,7 @@ if (selectedChannel.auth_status === 'expired') {
 }
 
     const youtube = getYouTubeClientForChannel(user, selectedChannel, getRedirectUri(user));
+    youtubeClient = youtube;
 
       const existingStreams = await Stream.findAll(rotation.user_id);
 
@@ -368,6 +372,7 @@ const broadcastResponse = await youtube.liveBroadcasts.insert({
 });
 
 const broadcast = broadcastResponse.data;
+createdBroadcastId = broadcast.id;
 
 try {
   const YoutubeChannel = require('../models/YoutubeChannel');
@@ -541,6 +546,7 @@ try {
       schedule_time: rotation.start_time,
       end_time: rotation.end_time
     });
+    streamRecordCreated = true;
 
     await streamingService.startStream(stream.id);
 
@@ -548,6 +554,11 @@ try {
   } catch (error) {
     console.error('[RotationService] Error starting rotation stream:', error);
 
+    // A broadcast that was created but never reached a saved stream would stay on
+    // the channel as an empty "Upcoming" entry, and the retry creates a new one.
+    if (createdBroadcastId && !streamRecordCreated) {
+      await discardUnusedBroadcast(youtubeClient, createdBroadcastId, error.message);
+    }
 
     await handleYouTubeAuthError(selectedChannel, error);
 

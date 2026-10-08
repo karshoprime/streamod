@@ -48,6 +48,23 @@ async function handleYouTubeAuthError(channel, error) {
   return true;
 }
 
+/**
+ * Removes a broadcast that was created on YouTube but never got a stream attached
+ * (a later step failed). Without this every failed start leaves an empty
+ * "Upcoming" broadcast behind on the channel.
+ */
+async function discardUnusedBroadcast(youtube, broadcastId, reason) {
+  if (!youtube || !broadcastId) return false;
+  try {
+    await youtube.liveBroadcasts.delete({ id: broadcastId });
+    console.warn(`[YouTubeService] Removed unused broadcast ${broadcastId} after a failed start (${reason})`);
+    return true;
+  } catch (cleanupError) {
+    console.warn(`[YouTubeService] Could not remove unused broadcast ${broadcastId}: ${cleanupError.message}`);
+    return false;
+  }
+}
+
 const loggedAlreadyHasBroadcast = new Set();
 
 // How long before End Time we let YouTube's own "auto stop" take over. Kept off
@@ -682,28 +699,38 @@ async function createYouTubeBroadcastInner(streamId, baseUrl) {
     }
   }
 
-  const keyStream = await resolveKeyStream(youtube, {
-    userId: stream.user_id,
-    channelId: stream.youtube_channel_id,
-    name: stream.key_stream_name,
-    fallbackTitle: stream.title
-  });
+  let keyStream;
+  let rtmpUrl;
+  let streamKey;
+  try {
+    keyStream = await resolveKeyStream(youtube, {
+      userId: stream.user_id,
+      channelId: stream.youtube_channel_id,
+      name: stream.key_stream_name,
+      fallbackTitle: stream.title
+    });
 
-  await youtube.liveBroadcasts.bind({
-    part: 'id,contentDetails',
-    id: broadcast.id,
-    streamId: keyStream.streamId
-  });
+    await youtube.liveBroadcasts.bind({
+      part: 'id,contentDetails',
+      id: broadcast.id,
+      streamId: keyStream.streamId
+    });
 
-  const rtmpUrl = keyStream.rtmpUrl;
-  const streamKey = keyStream.streamKey;
+    rtmpUrl = keyStream.rtmpUrl;
+    streamKey = keyStream.streamKey;
 
-  await Stream.update(streamId, {
-    youtube_broadcast_id: broadcast.id,
-    youtube_stream_id: keyStream.streamId,
-    rtmp_url: rtmpUrl,
-    stream_key: streamKey
-  });
+    await Stream.update(streamId, {
+      youtube_broadcast_id: broadcast.id,
+      youtube_stream_id: keyStream.streamId,
+      rtmp_url: rtmpUrl,
+      stream_key: streamKey
+    });
+  } catch (attachError) {
+    // The broadcast exists on YouTube but is not saved on the stream yet, so the
+    // next start would create another one. Remove this one first.
+    await discardUnusedBroadcast(youtube, broadcast.id, attachError.message);
+    throw attachError;
+  }
 
   console.log(`[YouTubeService] YouTube broadcast created successfully for stream ${streamId}`);
 
@@ -835,6 +862,7 @@ module.exports = {
   getYouTubeClientForStream,
   getBroadcastMonetization,
   syncBroadcastMonetization,
+  discardUnusedBroadcast,
   handleYouTubeAuthError,
   isInvalidGrantError,
   insertAdBreak,
