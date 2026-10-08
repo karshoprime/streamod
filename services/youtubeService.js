@@ -1,4 +1,5 @@
 const { google } = require('googleapis');
+require('../utils/youtubeRetry');
 const { encrypt, decrypt } = require('../utils/encryption');
 const User = require('../models/User');
 const Stream = require('../models/Stream');
@@ -204,7 +205,21 @@ async function syncBroadcastMonetization(youtube, broadcastId, settings) {
 
   // "Delay ads at start" is measured from the actual start when live, otherwise from now.
   const startTime = currentSnippet.actualStartTime ? new Date(currentSnippet.actualStartTime) : new Date();
-  const monetizationDetails = buildMonetizationDetails(adSettings, startTime);
+
+  // Only send an "un-pause" timestamp when YouTube is actually pausing ads right now.
+  const currentPause = currentBroadcast.monetizationDetails?.cuepointSchedule?.pauseAdsUntil;
+  const unpause = !!currentPause && new Date(currentPause).getTime() > Date.now();
+
+  // YouTube rejects the whole update when it dislikes one ad field, which used to
+  // leave the broadcast with no ads at all. Try the full settings first, then
+  // progressively simpler ones so monetization is still switched on.
+  const variants = [['full', buildMonetizationDetails(adSettings, startTime, { unpause })]];
+  if (variants[0][1].cuepointSchedule && variants[0][1].cuepointSchedule.pauseAdsUntil) {
+    variants.push(['without pauseAdsUntil', buildMonetizationDetails(adSettings, startTime, { skipPause: true })]);
+  }
+  if (adSettings.enabled && adSettings.autoAds) {
+    variants.push(['ads on, no automatic schedule', buildMonetizationDetails({ ...adSettings, autoAds: false }, startTime)]);
+  }
 
   const requestBody = {
     id: broadcastId,
@@ -232,15 +247,42 @@ async function syncBroadcastMonetization(youtube, broadcastId, settings) {
       privacyStatus: currentStatus.privacyStatus,
       selfDeclaredMadeForKids: currentStatus.selfDeclaredMadeForKids
     }),
-    monetizationDetails
+    monetizationDetails: variants[0][1]
   };
 
-  await youtube.liveBroadcasts.update({
-    part: 'id,snippet,contentDetails,status,monetizationDetails',
-    requestBody
-  });
+  let appliedVariant = null;
+  let lastError = null;
+  for (const [label, monetizationDetails] of variants) {
+    try {
+      await youtube.liveBroadcasts.update({
+        part: 'id,snippet,contentDetails,status,monetizationDetails',
+        requestBody: { ...requestBody, monetizationDetails }
+      });
+      appliedVariant = label;
+      break;
+    } catch (error) {
+      lastError = error;
+      const status = error.response?.status || error.code;
+      if (Number(status) !== 400) throw error;
+      console.warn(`[YouTubeService] YouTube rejected ad settings (${label}) for broadcast ${broadcastId}: ${error.message}`);
+    }
+  }
+  if (!appliedVariant) throw lastError;
 
-  console.log(`[YouTubeService] Monetization synced for broadcast ${broadcastId}: ${describeAdSettings(adSettings)}`);
+  if (appliedVariant === 'full') {
+    console.log(`[YouTubeService] Monetization synced for broadcast ${broadcastId}: ${describeAdSettings(adSettings)}`);
+  } else {
+    console.warn(`[YouTubeService] Monetization for broadcast ${broadcastId} applied in reduced form (${appliedVariant}); requested: ${describeAdSettings(adSettings)}`);
+  }
+
+  // Log what YouTube actually stored, so a setting it silently ignored is visible.
+  try {
+    const check = await youtube.liveBroadcasts.list({ part: 'monetizationDetails', id: broadcastId });
+    console.log(`[YouTubeService] YouTube now reports for ${broadcastId}: ${JSON.stringify(check.data.items?.[0]?.monetizationDetails || null)}`);
+  } catch (checkError) {
+    console.warn(`[YouTubeService] Could not read back monetization for ${broadcastId}: ${checkError.message}`);
+  }
+
   return adSettings;
 }
 

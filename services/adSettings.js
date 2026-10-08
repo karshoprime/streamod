@@ -99,7 +99,7 @@ function normalizeAdSettings(input, legacyEnabled) {
  * Builds the `monetizationDetails` payload for liveBroadcasts.update.
  * `startTime` is the moment the broadcast (actually) starts – used for the delay.
  */
-function buildMonetizationDetails(settings, startTime = new Date()) {
+function buildMonetizationDetails(settings, startTime = new Date(), options = {}) {
   const s = normalizeAdSettings(settings);
 
   if (!s.enabled) {
@@ -113,6 +113,9 @@ function buildMonetizationDetails(settings, startTime = new Date()) {
 
   if (s.autoAds) {
     if (s.frequency === 'CUSTOM') {
+      // The documented API fields live directly on cuepointSchedule.
+      cuepointSchedule.scheduleStrategy = s.strategy;
+      cuepointSchedule.repeatIntervalSecs = s.intervalMinutes * 60;
       cuepointSchedule.creatorCuepointConfig = {
         scheduleStrategy: s.strategy,
         repeatIntervalSecs: s.intervalMinutes * 60
@@ -121,13 +124,17 @@ function buildMonetizationDetails(settings, startTime = new Date()) {
       cuepointSchedule.ytOptimizedCuepointConfig = s.frequency;
     }
 
-    if (s.delayMinutes > 0) {
+    // YouTube refuses pauseAdsUntil unless ad automation is already active, so it
+    // is only sent when there is a real delay to apply or a running pause to clear.
+    if (!options.skipPause) {
       const base = startTime instanceof Date ? startTime : new Date(startTime || Date.now());
       const pauseUntil = new Date(base.getTime() + s.delayMinutes * 60 * 1000);
-      cuepointSchedule.pauseAdsUntil = pauseUntil.toISOString();
-    } else {
-      // A timestamp in the past un-pauses ads immediately (per API docs).
-      cuepointSchedule.pauseAdsUntil = new Date(Date.now() - 60 * 1000).toISOString();
+      if (s.delayMinutes > 0 && pauseUntil.getTime() > Date.now()) {
+        cuepointSchedule.pauseAdsUntil = pauseUntil.toISOString();
+      } else if (options.unpause) {
+        // A timestamp in the past un-pauses ads immediately (per API docs).
+        cuepointSchedule.pauseAdsUntil = new Date(Date.now() - 60 * 1000).toISOString();
+      }
     }
   }
 

@@ -5225,6 +5225,7 @@ const uploadedFileMap = new Map(
       if (currentRotation && currentRotation.status === 'active') {
         const fs = require('fs');
         const pendingPath = path.join(__dirname, 'pending_rotations', `${req.params.id}.json`);
+        fs.mkdirSync(path.dirname(pendingPath), { recursive: true });
 
         const pendingItems = [];
 
