@@ -113,7 +113,22 @@ function init() {
   checkRotations();
 }
 
+// A slow pass (YouTube calls being retried) used to overlap with the next
+// 60-second tick. Both passes then started the same rotation item, which left
+// two stream records and two broadcasts for one piece of content.
+let rotationCheckRunning = false;
+
 async function checkRotations() {
+  if (rotationCheckRunning) return;
+  rotationCheckRunning = true;
+  try {
+    await checkRotationsInner();
+  } finally {
+    rotationCheckRunning = false;
+  }
+}
+
+async function checkRotationsInner() {
   try {
     const activeRotations = await Rotation.findActiveRotations();
     const now = new Date();
@@ -231,6 +246,8 @@ async function checkRotations() {
           loggedAlreadyRunning.delete(streamKey);
           loggedScheduleInfo.delete(expiredLogKey);
 
+        } else if (result.error === 'Start already in progress') {
+          // Another pass is already starting this item; nothing to report.
         } else if (result.error === 'YouTube channel token expired. Please reconnect this channel.') {
           if (!loggedScheduleInfo.has(expiredLogKey)) {
             console.log(`[RotationService] Rotation ${rotation.name} skipped because selected channel token is expired`);
@@ -257,7 +274,22 @@ async function checkRotations() {
   }
 }
 
+const startingRotations = new Set();
+
 async function startRotationStream(rotation, item) {
+  if (startingRotations.has(rotation.id)) {
+    console.log(`[RotationService] Start already in progress for rotation ${rotation.name}, skipping duplicate start`);
+    return { success: false, error: 'Start already in progress' };
+  }
+  startingRotations.add(rotation.id);
+  try {
+    return await startRotationStreamInner(rotation, item);
+  } finally {
+    startingRotations.delete(rotation.id);
+  }
+}
+
+async function startRotationStreamInner(rotation, item) {
     let selectedChannel = null;
     let user = null;
     let youtubeClient = null;
