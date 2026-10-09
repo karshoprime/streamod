@@ -36,7 +36,7 @@
 ## 💻 System Requirements
 
 - **Node.js** v18 atau versi terbaru
-- **FFmpeg** untuk video processing
+- **FFmpeg** untuk video processing (6.1+ jika ingin streaming video H.265 — lihat bagian *Loop Video H.265* di bawah)
 - **SQLite3** (sudah termasuk dalam package)
 - **VPS/Server** dengan minimal 1 Core CPU & 1GB RAM
 - **Port** 7575 (dapat disesuaikan di file [.env](.env))
@@ -248,6 +248,27 @@ Untuk broadcast YouTube, "auto stop"-nya YouTube sendiri **dimatikan** selama st
 Di form Create/Edit Playlist, tab **Audios**, ada panel **Audio Mixing**. Secara default (toggle mati) audio dari background music yang dipilih akan **mengganti total** audio asli videonya (perilaku lama). Aktifkan toggle **Mix with original audio** supaya audio asli video dan background music sama-sama kedengaran — masing-masing punya slider gain sendiri (0%-200%) untuk atur keseimbangan volumenya.
 
 Tombol **Preview mix** memutar video pertama + audio pertama yang dipilih langsung di browser (pakai Web Audio API, tanpa lewat server/FFmpeg sama sekali) sehingga volumenya langsung berubah real-time begitu slider digeser — jadi bisa diatur dulu by-ear sebelum disimpan. Catatan: kalau video sumbernya memang tidak punya audio track sama sekali, mode mix tidak akan menghasilkan apa-apa dari sisi video itu (tidak ada yang bisa di-mix); pakai mode default (replace) untuk video semacam itu.
+
+## 🎞️ Loop Video H.265 (HEVC) di Mode Copy
+
+Video H.265 butuh bitrate kira-kira setengah dari H.264 untuk kualitas yang sama, jadi bandwidth VPS muat lebih banyak stream sekaligus — dan karena mode default (tanpa Advanced Settings) hanya meng-*copy* codec, CPU tetap hampir tidak terpakai.
+
+**Syarat: FFmpeg 6.1 atau lebih baru.** RTMP/FLV klasik tidak bisa membawa HEVC; dukungannya (Enhanced RTMP) baru ada sejak FFmpeg 6.1. Ubuntu 22.04 bawaannya FFmpeg 4.4, jadi pasang build statis terbaru:
+
+```bash
+sudo bash scripts/install-ffmpeg-static.sh
+pm2 restart streamflow
+```
+
+Script itu memasang FFmpeg ke `/opt/ffmpeg-static` dan membuat link di `/usr/local/bin` tanpa menghapus FFmpeg bawaan `apt`. Urutan binary yang dipakai aplikasi: `FFMPEG_PATH` di `.env` → `/usr/local/bin/ffmpeg` → `/usr/bin/ffmpeg` → binary bawaan npm. Versi yang terdeteksi dicetak di log saat aplikasi start (`pm2 logs`). Stream yang sedang live tetap memakai FFmpeg lama sampai stream itu di-restart.
+
+**Di Gallery**, setiap video sekarang punya badge codec (H.264 / H.265), terdeteksi otomatis saat upload/import (video lama dianalisis di background saat Gallery dibuka). Badge kuning muncul kalau jarak keyframe lebih dari 4 detik — YouTube minta keyframe tiap 2 detik, dan jarak yang panjang bisa bikin glitch di titik sambungan loop.
+
+Tombol **Optimize for loop** (ikon ↻ di tiap video) membuat *salinan* H.265 yang aman untuk di-loop di mode copy: keyframe tetap tiap 2 detik, closed GOP, tanpa B-frame, 8-bit, audio AAC. Video asli tidak diubah; hasilnya muncul sebagai video baru berjudul `<judul> (H.265 loop)` dengan badge hijau **Loop**. Pilihan kualitas: *High* (CRF 20), *Balanced* (CRF 23), *Smallest file* (CRF 26). Encode berjalan di background satu per satu dengan prioritas CPU rendah (`nice`) supaya stream yang sedang live tidak terganggu, dan bisa dibatalkan dari Gallery. Untuk video panjang prosesnya bisa lama — cukup dilakukan sekali per video.
+
+Pengaman saat start stream (mode copy): kalau videonya H.265 tapi FFmpeg di server masih di bawah 6.1, atau playlist mencampur codec berbeda (misalnya H.264 + H.265), stream langsung ditolak dengan pesan yang jelas — bukan gagal diam-diam lalu retry berulang. Mode **Advanced Settings** tidak terpengaruh (tetap re-encode ke H.264).
+
+Catatan: YouTube menerima HEVC lewat Enhanced RTMP, tapi tidak semua platform RTMP lain mendukungnya — untuk tujuan selain YouTube, cek dulu dokumentasi platformnya. Image Docker bawaan memakai FFmpeg dari Debian yang belum tentu 6.1+; cek versinya di log saat start.
 
 ## 🔔 Notifikasi Telegram / Webhook
 

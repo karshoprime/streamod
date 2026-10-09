@@ -432,7 +432,12 @@ function createTables() {
         // each at its own gain).
         ['playlists', 'audio_mix_mode', "TEXT DEFAULT 'replace'"],
         ['playlists', 'video_audio_gain', 'REAL DEFAULT 1'],
-        ['playlists', 'playlist_audio_gain', 'REAL DEFAULT 1']
+        ['playlists', 'playlist_audio_gain', 'REAL DEFAULT 1'],
+        // --- H.265 loop support: detected video codec, largest keyframe gap (s)
+        // in the first minute, and whether "Optimize for loop" produced the file.
+        ['videos', 'video_codec', 'TEXT'],
+        ['videos', 'gop_seconds', 'REAL'],
+        ['videos', 'loop_optimized', 'INTEGER DEFAULT 0']
       ];
 
       extraColumns.forEach(([table, column, type]) => {

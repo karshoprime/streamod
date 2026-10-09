@@ -419,6 +419,7 @@ function formatDuration(seconds) {
 </div>
 
 
+<script src="/js/hevc-loop.js?v=<%= appVersion %>-hevc1"></script>
 <script>
 let currentView = 'grid';
 let currentUploadType = 'video';
@@ -1647,6 +1648,9 @@ document.addEventListener('DOMContentLoaded', function() {
         }
       };
     }
+
+    // Codec badges + "Optimize for loop" action (public/js/hevc-loop.js).
+    window.HevcLoop?.decorate(galleryVideosState);
   }
 
   function renderGalleryContent() {
@@ -1870,6 +1874,7 @@ document.addEventListener('DOMContentLoaded', function() {
   bindGalleryItemInteractions();
   syncGalleryCollections();
   if (gridItems.length > 0) filterAndSort();
+  window.HevcLoop?.init(galleryVideosState);
 });
 </script>
 

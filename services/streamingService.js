@@ -1,20 +1,16 @@
 const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-const ffmpegInstaller = require('@ffmpeg-installer/ffmpeg');
 const { v4: uuidv4 } = require('uuid');
 const { db } = require('../db/database');
 const Stream = require('../models/Stream');
 const Playlist = require('../models/Playlist');
 const Video = require('../models/Video');
 const notificationService = require('./notificationService');
+const videoCodecService = require('./videoCodecService');
 
-let ffmpegPath;
-if (fs.existsSync('/usr/bin/ffmpeg')) {
-  ffmpegPath = '/usr/bin/ffmpeg';
-} else {
-  ffmpegPath = ffmpegInstaller.path;
-}
+// FFMPEG_PATH > /usr/local/bin/ffmpeg > /usr/bin/ffmpeg > bundled binary.
+const ffmpegPath = videoCodecService.getFfmpegPath();
 
 function shuffleArray(array) {
   const shuffled = [...array];
@@ -108,6 +104,36 @@ async function allAudioIsAac(filePaths) {
   return true;
 }
 
+// Codec-copy mode pushes the source video bitstream as-is. H.264 always works;
+// H.265/HEVC only works over RTMP with FFmpeg 6.1+ (Enhanced RTMP), and a
+// playlist can't switch codecs mid-stream. Fail up front with a clear message
+// instead of letting FFmpeg exit instantly and retry until it gives up.
+async function checkCopyModeVideo(streamId, filePaths) {
+  const { hasHevc } = await videoCodecService.assertCopyModeSupported(filePaths);
+  if (hasHevc) {
+    addStreamLog(streamId, 'Source video is H.265/HEVC - sending as-is over Enhanced RTMP (codec copy)');
+  }
+}
+
+// Same check, run before anything with side effects (e.g. creating a YouTube
+// broadcast) so an unsupported source doesn't leave an orphaned broadcast.
+async function preflightCopyMode(stream) {
+  if (stream.use_advanced_settings) return;
+  const projectRoot = path.resolve(__dirname, '..');
+  const toFullPath = (filepath) => path.join(projectRoot, 'public', String(filepath || '').replace(/^\/+/, ''));
+  let filePaths = [];
+
+  const streamWithVideo = await Stream.getStreamWithVideo(stream.id);
+  if (streamWithVideo && streamWithVideo.video_type === 'playlist') {
+    const playlist = await Playlist.findByIdWithVideos(stream.video_id);
+    filePaths = ((playlist && playlist.videos) || []).map(v => toFullPath(v.filepath));
+  } else {
+    const video = await Video.findById(stream.video_id);
+    if (video) filePaths = [toFullPath(video.filepath)];
+  }
+  await videoCodecService.assertCopyModeSupported(filePaths.filter(fp => fs.existsSync(fp)));
+}
+
 function copyModeAudioArgs(audioIsAac) {
   return audioIsAac
     ? ['-c:a', 'copy', '-bsf:a', 'aac_adtstoasc']
@@ -154,6 +180,7 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
 
   if (!hasAudio) {
     if (!stream.use_advanced_settings) {
+      await checkCopyModeVideo(stream.id, videoPaths);
       const audioIsAac = await allAudioIsAac(videoPaths);
       if (!audioIsAac) {
         addStreamLog(stream.id, 'Playlist contains non-AAC audio - re-encoding audio to AAC (video stays copy)');
@@ -250,6 +277,7 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
   const mixFilterComplex = `[0:a]volume=${videoGain}[va];[1:a]volume=${audioGain}[aa];[va][aa]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]`;
 
   if (!stream.use_advanced_settings) {
+    await checkCopyModeVideo(stream.id, videoPaths);
     if (isMixMode) {
       return [
         '-nostdin',
@@ -414,6 +442,7 @@ async function buildFFmpegArgs(stream) {
   const loopValue = stream.loop_video ? '-1' : '0';
 
   if (!stream.use_advanced_settings) {
+    await checkCopyModeVideo(stream.id, [videoPath]);
     const audioIsAac = await allAudioIsAac([videoPath]);
     if (!audioIsAac) {
       addStreamLog(stream.id, 'Video audio is not AAC - re-encoding audio to AAC (video stays copy)');
@@ -549,6 +578,8 @@ async function startStream(streamId, isRetry = false, baseUrl = null) {
 
     const originalStartTime = stream.start_time;
     const originalEndTime = stream.end_time;
+
+    await preflightCopyMode(stream);
 
     if (stream.is_youtube_api) {
       const youtubeService = require('./youtubeService');

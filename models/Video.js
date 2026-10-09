@@ -39,6 +39,13 @@ class Video {
             return reject(err);
           }
           resolve({ id, ...data, created_at: now, updated_at: now });
+          // Detect codec + keyframe interval in the background. Hooked here so
+          // every upload/import path is covered without touching each one.
+          setImmediate(() => {
+            try {
+              require('../services/videoCodecService').analyzeAndStore(id);
+            } catch (e) {}
+          });
         }
       );
     });

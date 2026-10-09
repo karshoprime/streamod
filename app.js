@@ -134,6 +134,7 @@ const Stream = require('./models/Stream');
 const ffmpeg = require('fluent-ffmpeg');
 const ffmpegInstaller = require('@ffmpeg-installer/ffmpeg');
 const streamingService = require('./services/streamingService');
+const videoCodecService = require('./services/videoCodecService');
 const schedulerService = require('./services/schedulerService');
 const packageJson = require('./package.json');
 ffmpeg.setFfmpegPath(ffmpegInstaller.path);
@@ -891,6 +892,7 @@ app.get('/gallery', isAuthenticated, async (req, res) => {
       return res.redirect('/gallery');
     }
     const videos = await Video.findByUserAndFolder(req.session.userId, currentFolderId);
+    videoCodecService.backfillMissing(videos);
     res.render('gallery', {
       title: 'Video Gallery',
       active: 'gallery',
@@ -917,6 +919,7 @@ app.get('/api/gallery/data', isAuthenticated, async (req, res) => {
     }
 
     const videos = await Video.findByUserAndFolder(req.session.userId, currentFolderId);
+    videoCodecService.backfillMissing(videos);
     res.json({
       success: true,
       videos,
@@ -2375,6 +2378,13 @@ app.delete('/api/videos/:id', isAuthenticated, async (req, res) => {
       return res.status(403).json({ success: false, error: 'Not authorized' });
     }
 
+    if (videoCodecService.isOptimizing(video.id)) {
+      return res.status(409).json({
+        success: false,
+        error: 'This video is being optimized for loop. Wait for it to finish or cancel it first.'
+      });
+    }
+
     const videoMap = new Map([[video.id, video]]);
     const conflicts = await findLiveStreamConflictsForVideos(req.session.userId, [video.id]);
     if (conflicts.length > 0) {
@@ -2412,6 +2422,67 @@ app.post('/api/videos/:id/rename', isAuthenticated, [
     console.error('Error renaming video:', error);
     res.status(500).json({ error: 'Failed to rename video' });
   }
+});
+// --- H.265 loop support -----------------------------------------------------
+// What the installed FFmpeg can do (HEVC over RTMP needs 6.1+, re-encoding
+// needs libx265). The gallery uses this to warn before a stream fails.
+app.get('/api/system/ffmpeg-info', isAuthenticated, async (req, res) => {
+  try {
+    const info = await videoCodecService.getFfmpegInfo();
+    res.json({
+      success: true,
+      version: info.version,
+      hevcRtmp: info.hevcRtmp,
+      hasLibx265: info.hasLibx265,
+      maxGopSeconds: videoCodecService.MAX_GOP_SECONDS,
+      qualities: Object.entries(videoCodecService.QUALITY_PRESETS).map(([id, preset]) => ({ id, label: preset.label, crf: preset.crf }))
+    });
+  } catch (error) {
+    console.error('Error reading FFmpeg info:', error);
+    res.status(500).json({ success: false, error: 'Failed to read FFmpeg info' });
+  }
+});
+app.get('/api/videos/optimize-loop/jobs', isAuthenticated, (req, res) => {
+  res.json({ success: true, jobs: videoCodecService.getJobsForUser(req.session.userId) });
+});
+// Re-encode a copy of the video to H.265 with a fixed 2s closed GOP so it can be
+// looped in codec-copy mode. Runs in the background; the original is kept.
+app.post('/api/videos/:id/optimize-loop', isAuthenticated, async (req, res) => {
+  try {
+    const video = await Video.findById(req.params.id);
+    if (!video) {
+      return res.status(404).json({ success: false, error: 'Video not found' });
+    }
+    if (video.user_id !== req.session.userId) {
+      return res.status(403).json({ success: false, error: 'Not authorized' });
+    }
+
+    const user = await User.findById(req.session.userId);
+    if (user && user.disk_limit > 0) {
+      // The H.265 copy is normally smaller than the source; budget for the
+      // source size so the result can never push the user past their limit.
+      const currentUsage = await User.getDiskUsage(req.session.userId);
+      if (currentUsage + (video.file_size || 0) > user.disk_limit) {
+        return res.status(400).json({
+          success: false,
+          error: 'Not enough disk quota left to create the optimized copy.'
+        });
+      }
+    }
+
+    const quality = typeof req.body.quality === 'string' ? req.body.quality : 'balanced';
+    const job = await videoCodecService.startOptimize(video, { quality });
+    res.json({ success: true, job });
+  } catch (error) {
+    res.status(400).json({ success: false, error: error.message || 'Failed to start optimization' });
+  }
+});
+app.delete('/api/videos/:id/optimize-loop', isAuthenticated, (req, res) => {
+  const cancelled = videoCodecService.cancelOptimize(req.params.id, req.session.userId);
+  if (!cancelled) {
+    return res.status(404).json({ success: false, error: 'No running optimization for this video' });
+  }
+  res.json({ success: true });
 });
 app.get('/stream/:videoId', isAuthenticated, async (req, res) => {
   try {
@@ -5424,6 +5495,10 @@ const server = app.listen(port, '0.0.0.0', async () => {
   } else {
     console.log(`  http://localhost:${port}`);
   }
+  videoCodecService.cleanupStaleTempFiles();
+  videoCodecService.getFfmpegInfo().then((info) => {
+    console.log(`FFmpeg ${info.version || 'unknown'} (${info.path}) - H.265 over RTMP: ${info.hevcRtmp ? 'supported' : 'NOT supported (needs 6.1+)'}, libx265 encoder: ${info.hasLibx265 ? 'yes' : 'no'}`);
+  });
   // Streams worth respawning after a restart (pm2 restart, deploy, reboot): Live
   // Nonstop ones always, plus ordinary scheduled streams that are still inside
   // their Start/End window (an in-progress schedule shouldn't "end" just because
