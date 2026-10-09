@@ -333,13 +333,20 @@ if (selectedChannel.auth_status === 'expired') {
 
       const existingStreams = await Stream.findAll(rotation.user_id);
 
+      // A stream restarted through the generic path can end up on a different
+      // ingestion key than the rotation's own. Matching on the key alone then
+      // missed it and a second stream + broadcast was created for the same item,
+      // so also accept the same title on the same channel.
+      const sameKey = (s) => !!rotation.youtube_stream_id && s.youtube_stream_id === rotation.youtube_stream_id;
       const matchedStreams = existingStreams.filter(s =>
-        s.youtube_stream_id === rotation.youtube_stream_id &&
-        s.title === item.title
+        s.title === item.title &&
+        (sameKey(s) || (!!s.is_youtube_api && s.youtube_channel_id === selectedChannel.id))
       );
 
+      const keyMatches = matchedStreams.filter(sameKey);
+      const preferredMatches = keyMatches.length > 0 ? keyMatches : matchedStreams;
       const existingRotationStream =
-        matchedStreams.length > 0 ? matchedStreams[matchedStreams.length - 1] : null;
+        preferredMatches.length > 0 ? preferredMatches[preferredMatches.length - 1] : null;
 
       if (existingRotationStream) {
         console.log(
@@ -456,7 +463,11 @@ try {
           console.log(`[RotationService] Reusing existing YouTube stream for rotation ${rotation.name}: ${liveStream.id}`);
         }
       } catch (err) {
+        // The lookup failed (not "key not found"). Creating a replacement key here
+        // made the rotation and its stream disagree about the key, so stop this
+        // attempt instead; the next check retries it.
         console.warn(`[RotationService] Failed to load existing YouTube stream ${rotation.youtube_stream_id}: ${err.message}`);
+        throw err;
       }
     }
 
@@ -610,42 +621,30 @@ async function stopRotationStream(rotation, item) {
 
 const streams = await Stream.findAll(rotation.user_id);
 
-let rotationStream = null;
+// Collect every stream that belongs to this rotation item. There should be one,
+// but a duplicate left over from an earlier fault must be stopped too, otherwise
+// it keeps streaming after the rotation's time window has ended.
+const sameChannel = (s) =>
+  !rotation.youtube_channel_id || !s.youtube_channel_id || s.youtube_channel_id === rotation.youtube_channel_id;
 
-// 1. paling akurat: cari berdasarkan broadcast rotation
-if (rotation.youtube_broadcast_id) {
-  rotationStream = streams.find(s =>
-    s.youtube_broadcast_id === rotation.youtube_broadcast_id
-  );
+const rotationStreams = streams.filter(s =>
+  (!!rotation.youtube_broadcast_id && s.youtube_broadcast_id === rotation.youtube_broadcast_id) ||
+  (!!rotation.youtube_stream_id && s.youtube_stream_id === rotation.youtube_stream_id) ||
+  (s.video_id === actualVideoId && s.title === item.title && sameChannel(s))
+);
+
+if (rotationStreams.length > 1) {
+  console.warn(`[RotationService] Rotation ${rotation.name} has ${rotationStreams.length} streams for one item, stopping all of them`);
 }
 
-// 2. fallback: cari berdasarkan persistent youtube stream milik rotation
-if (!rotationStream && rotation.youtube_stream_id) {
-  const matchedStreams = streams.filter(s =>
-    s.youtube_stream_id === rotation.youtube_stream_id
-  );
-
-  if (matchedStreams.length > 0) {
-    rotationStream = matchedStreams[matchedStreams.length - 1];
-  }
-}
-
-// 3. fallback terakhir: video + title
-if (!rotationStream) {
-  const matchedStreams = streams.filter(s =>
-    s.video_id === actualVideoId &&
-    s.title === item.title
-  );
-
-  if (matchedStreams.length > 0) {
-    rotationStream = matchedStreams[matchedStreams.length - 1];
-  }
-}
-
-    if (rotationStream) {
-      await streamingService.stopStream(rotationStream.id);
-      // hapus record stream hasil rotation
-      await Stream.delete(rotationStream.id, rotation.user_id);
+    for (const rotationStream of rotationStreams) {
+      try {
+        await streamingService.stopStream(rotationStream.id);
+        // hapus record stream hasil rotation
+        await Stream.delete(rotationStream.id, rotation.user_id);
+      } catch (stopError) {
+        console.error(`[RotationService] Error stopping stream ${rotationStream.id}:`, stopError.message);
+      }
       if (rotationStream.youtube_broadcast_id) {
         try {
           const YoutubeChannel = require('../models/YoutubeChannel');

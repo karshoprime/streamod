@@ -381,8 +381,28 @@ async function applyBroadcastLocalizations(youtube, videoId, { user, title, desc
  * stream with that name exists it is reused as-is (same RTMP url/key); otherwise a
  * new one is created and remembered under that name for next time.
  */
-async function resolveKeyStream(youtube, { userId, channelId, name, fallbackTitle }) {
+async function resolveKeyStream(youtube, { userId, channelId, name, fallbackTitle, currentStreamId }) {
   const trimmedName = (name || '').trim();
+
+  // No named key (streams created by a rotation): keep the ingestion key the
+  // stream already has. Creating a fresh key on every restart made the stream
+  // drift away from the key its rotation tracks.
+  if (!trimmedName && currentStreamId) {
+    const response = await youtube.liveStreams.list({
+      part: 'id,snippet,cdn,status',
+      id: currentStreamId
+    });
+    const liveStream = response.data.items?.[0];
+    if (liveStream && liveStream.cdn?.ingestionInfo) {
+      console.log(`[YouTubeService] Keeping existing key stream ${liveStream.id}`);
+      return {
+        streamId: liveStream.id,
+        streamKey: liveStream.cdn.ingestionInfo.streamName,
+        rtmpUrl: liveStream.cdn.ingestionInfo.ingestionAddress,
+        reused: true
+      };
+    }
+  }
 
   if (trimmedName) {
     const existing = await StreamKey.findByName(userId, channelId, trimmedName);
@@ -707,7 +727,8 @@ async function createYouTubeBroadcastInner(streamId, baseUrl) {
       userId: stream.user_id,
       channelId: stream.youtube_channel_id,
       name: stream.key_stream_name,
-      fallbackTitle: stream.title
+      fallbackTitle: stream.title,
+      currentStreamId: stream.youtube_stream_id
     });
 
     await youtube.liveBroadcasts.bind({
