@@ -1,7 +1,32 @@
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
-const { paths, getUniqueFilenameWithNumber } = require('./storage');
+const { paths, getUniqueFilename, getUniqueFilenameWithNumber } = require('./storage');
+
+const AUDIO_EXTENSIONS = ['.mp3', '.wav', '.m4a', '.aac', '.ogg', '.oga', '.opus', '.flac'];
+
+// Drive serves audio as audio/* (e.g. audio/mpeg). Decide "is this audio?" from
+// the content-type first, then the file name, then the first bytes of the file.
+function looksLikeAudio(contentType, filename, buffer) {
+  if ((contentType || '').toLowerCase().startsWith('audio/')) return true;
+  if (filename && AUDIO_EXTENSIONS.includes(path.extname(filename).toLowerCase())) return true;
+  if (filename && path.extname(filename)) return false;
+  if (!buffer || buffer.length < 4) return false;
+  const tag = buffer.toString('latin1', 0, 4);
+  if (tag.startsWith('ID3') || tag === 'fLaC' || tag === 'OggS') return true;
+  if (tag === 'RIFF' && buffer.toString('latin1', 8, 12) === 'WAVE') return true;
+  return buffer[0] === 0xFF && (buffer[1] & 0xE0) === 0xE0;
+}
+
+function filenameFromContentDisposition(header) {
+  if (!header) return null;
+  const star = header.match(/filename\*=(?:UTF-8'')?([^;]+)/i);
+  if (star) {
+    try { return decodeURIComponent(star[1].trim().replace(/^"|"$/g, '')); } catch (e) {}
+  }
+  const plain = header.match(/filename="?([^";]+)"?/i);
+  return plain ? plain[1].trim() : null;
+}
 
 function extractFileId(driveUrl) {
   let match = driveUrl.match(/\/file\/d\/([^\/]+)/);
@@ -133,6 +158,7 @@ async function tryDownloadFromUrl(url, cookies, commonHeaders) {
   const contentType = response.headers['content-type'] || '';
   const isVideo = !contentType.includes('text/html') && 
                   (contentType.includes('video') || 
+                   contentType.includes('audio') ||
                    contentType.includes('octet-stream') ||
                    contentType.includes('application/'));
   
@@ -260,7 +286,7 @@ async function downloadFile(fileId, progressCallback = null) {
     }
     
     if (!downloadSuccess || !response) {
-      throw new Error('Could not download file from Google Drive. The file might be private, too large, or require special permissions. Please try downloading manually and uploading.');
+      throw new Error('Could not download file from Google Drive. The file might be private, over its download quota, or not a video/audio file. Please try downloading manually and uploading.');
     }
 
     if (response.status !== 200) {
@@ -273,6 +299,11 @@ async function downloadFile(fileId, progressCallback = null) {
         throw new Error('Too many requests. Please wait a few minutes and try again.');
       }
       throw new Error(`Download failed with HTTP ${response.status}`);
+    }
+
+    const responseContentType = response.headers['content-type'] || '';
+    if (!originalFilename) {
+      originalFilename = filenameFromContentDisposition(response.headers['content-disposition']);
     }
 
     const totalSize = parseInt(response.headers['content-length'] || '0');
@@ -350,6 +381,29 @@ async function downloadFile(fileId, progressCallback = null) {
             return;
           }
           
+          if (looksLikeAudio(responseContentType, originalFilename, buffer)) {
+            let audioOriginalFilename = originalFilename || `gdrive_${fileId}.mp3`;
+            if (!path.extname(audioOriginalFilename)) {
+              audioOriginalFilename += '.mp3';
+            }
+
+            const audioFilename = getUniqueFilename(audioOriginalFilename);
+            const audioPath = path.join(paths.audio, audioFilename);
+            fs.mkdirSync(paths.audio, { recursive: true });
+            fs.renameSync(tempPath, audioPath);
+
+            console.log(`Downloaded audio from Google Drive: ${audioFilename} (${fileSize} bytes)`);
+            safeResolve({
+              filename: audioFilename,
+              originalFilename: audioOriginalFilename,
+              localFilePath: audioPath,
+              mimeType: responseContentType || 'audio/mpeg',
+              fileSize: fileSize,
+              isAudio: true
+            });
+            return;
+          }
+
           const validVideoHeaders = [
             [0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70],
             [0x00, 0x00, 0x00, 0x1C, 0x66, 0x74, 0x79, 0x70],

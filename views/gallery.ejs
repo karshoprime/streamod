@@ -971,7 +971,7 @@ function initCloudModal(type) {
       title: 'Import from Google Drive',
       icon: '/images/google drive.png',
       placeholder: 'https://drive.google.com/file/d/...',
-      hint: 'Make sure the file is shared with "Anyone with the link"',
+      hint: 'Make sure the file is shared with "Anyone with the link". Video and audio (MP3, WAV, M4A, FLAC, OGG) are supported',
       endpoint: '/api/videos/import-drive',
       urlField: 'driveUrl'
     },
@@ -1086,7 +1086,7 @@ function showImportProgress(jobId) {
       document.getElementById('progress-status').textContent = status.message;
       if (status.status === 'complete') {
         document.getElementById('progress-icon').className = 'ti ti-check text-green-400 text-2xl';
-        showToast('success', 'Video imported successfully');
+        showToast('success', status.message || 'Imported successfully');
         await window.refreshGalleryData?.();
         clearInterval(interval);
       } else if (status.status === 'failed') {

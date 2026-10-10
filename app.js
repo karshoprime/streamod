@@ -3049,6 +3049,53 @@ async function processGoogleDriveImport(jobId, fileId, userId, folderId = null) 
       return;
     }
     
+    if (result.isAudio) {
+      // Audio from Drive goes through the same pipeline as /api/audio/upload:
+      // convert to AAC (.m4a) if needed, then store it as an audio media item.
+      importJobs[jobId] = {
+        status: 'processing',
+        progress: 100,
+        message: 'Processing audio...'
+      };
+
+      let processed;
+      try {
+        processed = await audioConverter.processAudioFile(result.localFilePath, result.originalFilename);
+      } catch (convertError) {
+        if (fs.existsSync(result.localFilePath)) {
+          fs.unlinkSync(result.localFilePath);
+        }
+        throw new Error(`Failed to process audio: ${convertError.message}`);
+      }
+
+      const audioInfo = await audioConverter.getAudioInfo(processed.filepath);
+      const audioStats = fs.statSync(processed.filepath);
+      const audioItem = await Video.create({
+        title: path.parse(result.originalFilename).name,
+        filepath: `/uploads/audio/${path.basename(processed.filepath)}`,
+        thumbnail_path: '/images/audio-thumbnail.png',
+        file_size: audioStats.size,
+        duration: audioInfo.duration,
+        format: 'aac',
+        resolution: null,
+        bitrate: audioInfo.bitrate,
+        fps: null,
+        user_id: userId,
+        folder_id: folderId
+      });
+
+      importJobs[jobId] = {
+        status: 'complete',
+        progress: 100,
+        message: processed.converted ? 'Audio converted to AAC and imported successfully' : 'Audio imported successfully',
+        videoId: audioItem.id
+      };
+      setTimeout(() => {
+        delete importJobs[jobId];
+      }, 5 * 60 * 1000);
+      return;
+    }
+
     importJobs[jobId] = {
       status: 'processing',
       progress: 100,
