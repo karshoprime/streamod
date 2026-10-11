@@ -435,9 +435,9 @@ async function resolveKeyStream(youtube, { userId, channelId, name, fallbackTitl
         title: trimmedName || `${fallbackTitle} - Stream`
       },
       cdn: {
-        frameRate: '30fps',
+        frameRate: 'variable',
         ingestionType: 'rtmp',
-        resolution: '1080p'
+        resolution: 'variable'
       },
       contentDetails: {
         // This is exactly what "Stream Name (key stream)" is for: rebind the SAME

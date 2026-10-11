@@ -479,9 +479,9 @@ try {
             title: rotation.name
           },
           cdn: {
-            frameRate: '30fps',
+            frameRate: 'variable',
             ingestionType: 'rtmp',
-            resolution: '1080p'
+            resolution: 'variable'
           }
         }
       });
