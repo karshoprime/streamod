@@ -552,6 +552,47 @@ async function createYouTubeBroadcastInner(streamId, baseUrl) {
 
   const youtube = google.youtube({ version: 'v3', auth: oauth2Client });
 
+  // The saved broadcast may still be live on YouTube even though this stream's
+  // RTMP credentials were cleared (e.g. the app restarted mid-stream and the
+  // stream was revived by the scheduler). Creating a new broadcast then left two
+  // broadcasts on the same key: the old one stays live, the new one sits in
+  // "Upcoming". Pick the old broadcast back up instead.
+  if (stream.youtube_broadcast_id && (!stream.rtmp_url || !stream.stream_key) && stream.youtube_stream_id) {
+    try {
+      const prevResp = await youtube.liveBroadcasts.list({
+        part: 'id,status,contentDetails',
+        id: stream.youtube_broadcast_id
+      });
+      const prev = prevResp.data.items?.[0];
+      const prevStatus = prev?.status?.lifeCycleStatus || null;
+      const stillUsable = ['ready', 'testing', 'testStarting', 'liveStarting', 'live'].includes(prevStatus);
+      if (prev && stillUsable && prev.contentDetails?.boundStreamId === stream.youtube_stream_id) {
+        const keyResp = await youtube.liveStreams.list({
+          part: 'id,cdn',
+          id: stream.youtube_stream_id
+        });
+        const key = keyResp.data.items?.[0];
+        const ingestion = key?.cdn?.ingestionInfo;
+        if (ingestion?.ingestionAddress && ingestion?.streamName) {
+          await Stream.update(streamId, {
+            rtmp_url: ingestion.ingestionAddress,
+            stream_key: ingestion.streamName
+          });
+          console.log(`[YouTubeService] Stream ${streamId}: saved broadcast ${stream.youtube_broadcast_id} is still ${prevStatus} on YouTube, reusing it instead of creating a new one`);
+          return {
+            success: true,
+            rtmpUrl: ingestion.ingestionAddress,
+            streamKey: ingestion.streamName,
+            broadcastId: stream.youtube_broadcast_id,
+            streamId: stream.youtube_stream_id
+          };
+        }
+      }
+    } catch (prevError) {
+      console.warn(`[YouTubeService] Could not check saved broadcast ${stream.youtube_broadcast_id} for stream ${streamId}: ${prevError.message}`);
+    }
+  }
+
   if (stream.youtube_broadcast_id && stream.rtmp_url && stream.stream_key) {
     // Reusing a broadcast we already created blindly assumed it was still usable.
     // If it was already ended on YouTube's side (manually stopped in Studio, or
