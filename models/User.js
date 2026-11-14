@@ -14,7 +14,13 @@ class User {
   }
   static findByUsername(username) {
     return new Promise((resolve, reject) => {
-      db.get('SELECT * FROM users WHERE username = ?', [username], (err, row) => {
+      // Usernames are matched without regard to letter case ("Agus" = "agus").
+      // If two accounts differ only by case, the exact match wins.
+      const name = typeof username === 'string' ? username.trim() : username;
+      db.get(
+        'SELECT * FROM users WHERE username = ? COLLATE NOCASE ORDER BY (username = ?) DESC LIMIT 1',
+        [name, name],
+        (err, row) => {
         if (err) {
           return reject(err);
         }
