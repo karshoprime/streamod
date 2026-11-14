@@ -43,6 +43,14 @@
 
           <button
             type="button"
+            onclick="switchTab('live')"
+            id="tab-live"
+            class="px-4 py-2 text-sm rounded-lg bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors">
+            Live
+          </button>
+
+          <button
+            type="button"
             onclick="switchTab('afterlive')"
             id="tab-afterlive"
             class="px-4 py-2 text-sm rounded-lg bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors">
@@ -180,16 +188,12 @@ let isBulkTranslating = false;
 function switchTab(tab) {
   currentTab = tab;
 
-  const regularBtn = document.getElementById('tab-regular');
-  const afterliveBtn = document.getElementById('tab-afterlive');
-
-  if (tab === 'regular') {
-    regularBtn.className = 'px-4 py-2 text-sm rounded-lg bg-primary text-white transition-colors';
-    afterliveBtn.className = 'px-4 py-2 text-sm rounded-lg bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors';
-  } else {
-    regularBtn.className = 'px-4 py-2 text-sm rounded-lg bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors';
-    afterliveBtn.className = 'px-4 py-2 text-sm rounded-lg bg-primary text-white transition-colors';
-  }
+  const activeClass = 'px-4 py-2 text-sm rounded-lg bg-primary text-white transition-colors';
+  const idleClass = 'px-4 py-2 text-sm rounded-lg bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors';
+  ['regular', 'live', 'afterlive'].forEach(name => {
+    const btn = document.getElementById(`tab-${name}`);
+    if (btn) btn.className = name === tab ? activeClass : idleClass;
+  });
 
   loadTranslateVideos();
 }
@@ -371,7 +375,7 @@ function renderDesktopTable(videos) {
         <img src="${video.thumbnail || ''}" class="w-24 h-14 object-cover rounded-lg bg-gray-900" />
       </td>
       <td class="px-6 py-4">
-        <div class="text-white font-medium max-w-[420px] truncate">${video.title || '-'}</div>
+        <div class="text-white font-medium max-w-[420px] truncate">${kindBadge(video.kind)}${escapeTranslateHtml(video.title || '-')}</div>
       </td>
       <td class="px-6 py-4 text-gray-300">${video.uploadDate || '-'}</td>
       <td class="px-6 py-4">
@@ -409,7 +413,7 @@ function renderMobileCards(videos) {
     <div class="bg-gray-800 rounded-lg p-4 flex gap-4">
       <img src="${video.thumbnail || ''}" class="w-24 h-16 object-cover rounded-lg flex-shrink-0 bg-gray-900" />
       <div class="flex-1 min-w-0">
-        <div class="text-white font-medium leading-snug line-clamp-2">${video.title || '-'}</div>
+        <div class="text-white font-medium leading-snug line-clamp-2">${kindBadge(video.kind)}${escapeTranslateHtml(video.title || '-')}</div>
         <div class="text-xs text-gray-400 mt-2">${video.uploadDate || '-'}</div>
         <div class="text-xs text-gray-400 mt-1">${video.languageCount || 0} languages</div>
 
@@ -423,6 +427,16 @@ function renderMobileCards(videos) {
       </div>
     </div>
   `).join('');
+}
+
+function escapeTranslateHtml(text) {
+  return String(text).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+}
+
+function kindBadge(kind) {
+  if (kind === 'live') return '<span class="mr-2 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-600 text-white">LIVE</span>';
+  if (kind === 'upcoming') return '<span class="mr-2 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-gray-600 text-gray-100">UPCOMING</span>';
+  return '';
 }
 
 async function loadTranslateVideos() {
@@ -447,6 +461,7 @@ async function loadTranslateVideos() {
     const videos = (result.videos || []).map(video => ({
       id: video.id,
       title: video.title,
+      kind: video.kind,
       uploadDate: video.uploadDate ? new Date(video.uploadDate).toLocaleString() : '-',
       thumbnail: video.thumbnail,
       languageCount: video.languageCount || 0

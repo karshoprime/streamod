@@ -5671,113 +5671,110 @@ app.get('/api/translate/videos', isAuthenticated, async (req, res) => {
       targetLanguages = [];
     }
 
-    // 1) Video biasa / published / sebagian live
-    let searchVideoIds = [];
-    try {
-      const searchResponse = await youtube.search.list({
-        part: ['snippet'],
-        channelId: selectedChannel.channel_id,
-        maxResults: 25,
-        order: 'date',
-        type: ['video']
-      });
+    const selectedTab = ['regular', 'live', 'afterlive'].includes(tab) ? tab : 'regular';
+    const MAX_ITEMS = 200;
 
-      const searchItems = searchResponse.data.items || [];
-      searchVideoIds = searchItems
-        .map(item => item.id?.videoId)
-        .filter(Boolean);
+    // Collect video IDs from a paged YouTube list call, up to MAX_ITEMS.
+    const collectIds = async (label, fetchPage, pickId) => {
+      const ids = [];
+      let pageToken;
+      try {
+        do {
+          const response = await fetchPage(pageToken);
+          for (const item of response.data.items || []) {
+            const id = pickId(item);
+            if (id) ids.push(id);
+          }
+          pageToken = response.data.nextPageToken;
+        } while (pageToken && ids.length < MAX_ITEMS);
+      } catch (listErr) {
+        console.error(`[Translate API] Failed loading ${label}:`, listErr.message);
+      }
+      return ids.slice(0, MAX_ITEMS);
+    };
 
-      console.log('[Translate API] searchVideoIds:', searchVideoIds.length);
-    } catch (searchErr) {
-      console.error('[Translate API] Failed loading search videos:', searchErr.message);
-    }
-
-    // 2) Upcoming / scheduled livestream
-    let upcomingVideoIds = [];
-    try {
-      const upcomingResponse = await youtube.liveBroadcasts.list({
-        part: ['id', 'snippet', 'status', 'contentDetails'],
-        broadcastStatus: 'upcoming',
+    const listBroadcasts = (broadcastStatus) => collectIds(
+      `${broadcastStatus} broadcasts`,
+      (pageToken) => youtube.liveBroadcasts.list({
+        part: ['id'],
+        broadcastStatus,
         broadcastType: 'all',
         mine: true,
-        maxResults: 25
-      });
+        maxResults: 50,
+        pageToken
+      }),
+      (item) => item.id
+    );
 
-      const upcomingItems = upcomingResponse.data.items || [];
-      upcomingVideoIds = upcomingItems
-        .map(item => item.id)
-        .filter(Boolean);
-
-      console.log('[Translate API] upcomingVideoIds:', upcomingVideoIds.length);
-    } catch (upcomingErr) {
-      console.error('[Translate API] Failed loading upcoming broadcasts:', upcomingErr.message);
+    let candidateIds = [];
+    if (selectedTab === 'regular') {
+      // Regular videos come from the channel's uploads playlist. search.list
+      // (used before) returned only the 25 newest items, mostly lives on this
+      // kind of channel, so regular videos were pushed out of the list.
+      let uploadsPlaylistId = null;
+      try {
+        const channelResponse = await youtube.channels.list({
+          part: ['contentDetails'],
+          id: [selectedChannel.channel_id]
+        });
+        uploadsPlaylistId = channelResponse.data.items?.[0]?.contentDetails?.relatedPlaylists?.uploads || null;
+      } catch (channelErr) {
+        console.error('[Translate API] Failed loading uploads playlist:', channelErr.message);
+      }
+      if (uploadsPlaylistId) {
+        candidateIds = await collectIds(
+          'uploads playlist',
+          (pageToken) => youtube.playlistItems.list({
+            part: ['contentDetails'],
+            playlistId: uploadsPlaylistId,
+            maxResults: 50,
+            pageToken
+          }),
+          (item) => item.contentDetails?.videoId
+        );
+      }
+    } else if (selectedTab === 'live') {
+      candidateIds = [
+        ...(await listBroadcasts('active')),
+        ...(await listBroadcasts('upcoming'))
+      ];
+    } else {
+      candidateIds = await listBroadcasts('completed');
     }
 
-    // 3) Active / live livestream
-    let activeVideoIds = [];
-    try {
-      const activeResponse = await youtube.liveBroadcasts.list({
-        part: ['id', 'snippet', 'status', 'contentDetails'],
-        broadcastStatus: 'active',
-        broadcastType: 'all',
-        mine: true,
-        maxResults: 25
-      });
-
-      const activeItems = activeResponse.data.items || [];
-      activeVideoIds = activeItems
-        .map(item => item.id)
-        .filter(Boolean);
-
-      console.log('[Translate API] activeVideoIds:', activeVideoIds.length);
-    } catch (activeErr) {
-      console.error('[Translate API] Failed loading active broadcasts:', activeErr.message);
-    }
-
-    // 4) Completed / afterlive livestream
-    let completedVideoIds = [];
-    try {
-      const completedResponse = await youtube.liveBroadcasts.list({
-        part: ['id', 'snippet', 'status', 'contentDetails'],
-        broadcastStatus: 'completed',
-        broadcastType: 'all',
-        mine: true,
-        maxResults: 25
-      });
-
-      const completedItems = completedResponse.data.items || [];
-      completedVideoIds = completedItems
-        .map(item => item.id)
-        .filter(Boolean);
-
-      console.log('[Translate API] completedVideoIds:', completedVideoIds.length);
-    } catch (completedErr) {
-      console.error('[Translate API] Failed loading completed broadcasts:', completedErr.message);
-    }
-
-    // Gabungkan semua ID video, buang duplicate
-    const videoIds = [
-      ...new Set([
-        ...searchVideoIds,
-        ...upcomingVideoIds,
-        ...activeVideoIds,
-        ...completedVideoIds
-      ])
-    ];
-
-    console.log('[Translate API] merged videoIds:', videoIds.length);
+    const videoIds = [...new Set(candidateIds)];
+    console.log(`[Translate API] tab=${selectedTab} candidate videos:`, videoIds.length);
 
     if (videoIds.length === 0) {
       return res.json({ success: true, videos: [] });
     }
 
-    const videosResponse = await youtube.videos.list({
-      part: ['snippet', 'liveStreamingDetails', 'localizations', 'status'],
-      id: videoIds
-    });
-
-    const items = videosResponse.data.items || [];
+    // videos.list accepts at most 50 IDs per call.
+    const items = [];
+    for (let i = 0; i < videoIds.length; i += 50) {
+      const videosResponse = await youtube.videos.list({
+        part: ['snippet', 'liveStreamingDetails', 'localizations', 'status'],
+        id: videoIds.slice(i, i + 50),
+        maxResults: 50
+      });
+      items.push(...(videosResponse.data.items || []));
+    }
     console.log('[Translate API] videos.list items:', items.length);
+
+    // Classify every video by what YouTube says it is now:
+    //  regular   - never a live stream (no liveStreamingDetails)
+    //  live      - live right now, or scheduled/upcoming
+    //  afterlive - a live stream that actually ran and has ended (replay)
+    // Broadcasts that ended without ever going live are left out of every tab.
+    const classify = (video) => {
+      const live = video.liveStreamingDetails;
+      const state = video.snippet?.liveBroadcastContent || 'none';
+      if (!live) return 'regular';
+      if (state === 'live') return 'live';
+      if (state === 'upcoming') return 'upcoming';
+      if (live.actualStartTime) return 'afterlive';
+      return 'unused';
+    };
 
     let videos = items.map(video => {
       const localizations = video.localizations || {};
@@ -5788,19 +5785,16 @@ app.get('/api/translate/videos', isAuthenticated, async (req, res) => {
       );
 
       const liveDetails = video.liveStreamingDetails || {};
-      const actualStartTime = liveDetails.actualStartTime || null;
-      const actualEndTime = liveDetails.actualEndTime || null;
-      const scheduledStartTime = liveDetails.scheduledStartTime || null;
-
-      const isAfterlive = !!actualEndTime;
-      const isScheduled = !!scheduledStartTime && !actualEndTime;
-      const isLiveNow = !!actualStartTime && !actualEndTime;
-      const isRegular = !isAfterlive; // regular termasuk published + live + scheduled
+      const kind = classify(video);
 
       return {
         id: video.id,
         title: video.snippet?.title || '-',
-        uploadDate: video.snippet?.publishedAt || scheduledStartTime || '',
+        uploadDate:
+          liveDetails.actualStartTime ||
+          liveDetails.scheduledStartTime ||
+          video.snippet?.publishedAt ||
+          '',
         thumbnail:
           video.snippet?.thumbnails?.medium?.url ||
           video.snippet?.thumbnails?.default?.url ||
@@ -5808,18 +5802,20 @@ app.get('/api/translate/videos', isAuthenticated, async (req, res) => {
         languageCount: existingLanguages.length,
         availableLanguages: existingLanguages,
         missingLanguages,
-        isAfterlive,
-        isRegular,
-        isScheduled,
-        isLiveNow
+        kind,
+        isAfterlive: kind === 'afterlive',
+        isRegular: kind === 'regular',
+        isScheduled: kind === 'upcoming',
+        isLiveNow: kind === 'live'
       };
     });
 
-    if (tab === 'afterlive') {
-      videos = videos.filter(v => v.isAfterlive);
+    if (selectedTab === 'regular') {
+      videos = videos.filter(v => v.kind === 'regular');
+    } else if (selectedTab === 'live') {
+      videos = videos.filter(v => v.kind === 'live' || v.kind === 'upcoming');
     } else {
-      // regular = video biasa + live aktif + scheduled
-      videos = videos.filter(v => v.isRegular);
+      videos = videos.filter(v => v.kind === 'afterlive');
     }
 
     videos.sort((a, b) => new Date(b.uploadDate || 0) - new Date(a.uploadDate || 0));
