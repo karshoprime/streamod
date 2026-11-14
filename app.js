@@ -5178,7 +5178,8 @@ function parseRotationSettings(body) {
     rotationFields: {
       youtube_ad_settings: JSON.stringify(adSettings),
       youtube_localizations: JSON.stringify(localizations),
-      youtube_source_language: sourceLanguage
+      youtube_source_language: sourceLanguage,
+      ...(body.key_stream_name !== undefined ? { key_stream_name: parseKeyStreamName(body.key_stream_name) } : {})
     }
   };
 }

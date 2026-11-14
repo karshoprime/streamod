@@ -321,6 +321,12 @@ function createTables() {
         }
       });
 
+      db.run(`ALTER TABLE stream_rotations ADD COLUMN key_stream_name TEXT`, (err) => {
+        if (err && !err.message.includes('duplicate column name')) {
+          console.error('Error adding key_stream_name column to stream_rotations:', err.message);
+        }
+      });
+
       db.run(`ALTER TABLE stream_rotations ADD COLUMN youtube_channel_id TEXT`, (err) => {
         if (err && !err.message.includes('duplicate column name')) {
           console.error('Error adding youtube_channel_id column to stream_rotations:', err.message);

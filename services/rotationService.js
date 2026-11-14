@@ -6,7 +6,7 @@ const { google } = require('googleapis');
 const { decrypt } = require('../utils/encryption');
 const path = require('path');
 const fs = require('fs');
-const { syncBroadcastMonetization, applyBroadcastLocalizations, getYouTubeClientForChannel, handleYouTubeAuthError, discardUnusedBroadcast } = require('./youtubeService');
+const { syncBroadcastMonetization, applyBroadcastLocalizations, getYouTubeClientForChannel, handleYouTubeAuthError, discardUnusedBroadcast, resolveKeyStream } = require('./youtubeService');
 const notificationService = require('./notificationService');
 const { normalizeAdSettings } = require('./adSettings');
 const { sanitizeLanguageList } = require('../config/youtubeLanguages');
@@ -449,7 +449,32 @@ try {
     let rtmpUrl;
     let streamKey;
 
-    if (rotation.youtube_stream_id) {
+    // Named key stream, same as "Stream Name (key stream)" on the Streams tab:
+    // a name used before (by a stream or a rotation on this channel) reuses its
+    // RTMP url/key; a new name creates a reusable key with variable resolution.
+    const keyStreamName = (rotation.key_stream_name || '').trim();
+    if (keyStreamName) {
+      const resolvedKey = await resolveKeyStream(youtube, {
+        userId: rotation.user_id,
+        channelId: selectedChannel.id,
+        name: keyStreamName,
+        fallbackTitle: rotation.name
+      });
+      liveStream = { id: resolvedKey.streamId };
+      rtmpUrl = resolvedKey.rtmpUrl;
+      streamKey = resolvedKey.streamKey;
+      if (rotation.youtube_stream_id !== resolvedKey.streamId) {
+        await Rotation.update(rotation.id, {
+          youtube_stream_id: resolvedKey.streamId,
+          youtube_stream_key: streamKey,
+          youtube_rtmp_url: rtmpUrl
+        });
+        rotation.youtube_stream_id = resolvedKey.streamId;
+      }
+      console.log(`[RotationService] Rotation ${rotation.name} uses key stream "${keyStreamName}" (${resolvedKey.streamId})`);
+    }
+
+    if (!liveStream && rotation.youtube_stream_id) {
       try {
         const existingStreamResponse = await youtube.liveStreams.list({
           part: ['id', 'snippet', 'cdn', 'status'],
@@ -473,7 +498,7 @@ try {
 
     if (!liveStream) {
       const streamResponse = await youtube.liveStreams.insert({
-        part: ['snippet', 'cdn'],
+        part: ['snippet', 'cdn', 'contentDetails'],
         requestBody: {
           snippet: {
             title: rotation.name
@@ -482,6 +507,9 @@ try {
             frameRate: 'variable',
             ingestionType: 'rtmp',
             resolution: 'variable'
+          },
+          contentDetails: {
+            isReusable: true
           }
         }
       });
@@ -585,6 +613,7 @@ try {
       youtube_localizations: JSON.stringify(targetLanguages),
       youtube_source_language: sourceLanguage,
       youtube_channel_id: selectedChannel.id,
+      key_stream_name: keyStreamName || null,
       is_youtube_api: true,
       schedule_time: rotation.start_time,
       end_time: rotation.end_time
