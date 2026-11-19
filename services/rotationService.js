@@ -614,6 +614,7 @@ try {
       youtube_source_language: sourceLanguage,
       youtube_channel_id: selectedChannel.id,
       key_stream_name: keyStreamName || null,
+      audio_fade_in: Number(rotation.audio_fade_in) || 0,
       is_youtube_api: true,
       schedule_time: rotation.start_time,
       end_time: rotation.end_time

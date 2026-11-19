@@ -38,7 +38,8 @@ class Stream {
       repeat_anchor_start = null,
       repeat_anchor_end = null,
       key_stream_name = null,
-      nonstop = false
+      nonstop = false,
+      audio_fade_in = 0
     } = streamData;
     const loop_video_int = loop_video ? 1 : 0;
     const use_advanced_settings_int = use_advanced_settings ? 1 : 0;
@@ -56,8 +57,8 @@ class Stream {
           youtube_broadcast_id, youtube_stream_id, youtube_description, youtube_privacy, youtube_category, youtube_tags, youtube_thumbnail, youtube_channel_id, is_youtube_api, youtube_monetization,
           youtube_ad_settings, youtube_localizations, youtube_source_language,
           repeat_mode, repeat_anchor_start, repeat_anchor_end,
-          key_stream_name, nonstop
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          key_stream_name, nonstop, audio_fade_in
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           id, title, video_id, rtmp_url, stream_key, platform, platform_icon,
           bitrate, resolution, fps, orientation, loop_video_int,
@@ -65,7 +66,7 @@ class Stream {
           youtube_broadcast_id, youtube_stream_id, youtube_description, youtube_privacy, youtube_category, youtube_tags, youtube_thumbnail, youtube_channel_id, is_youtube_api_int, youtube_monetization_int,
           youtube_ad_settings, youtube_localizations, youtube_source_language,
           repeat_mode || 'none', repeat_anchor_start, repeat_anchor_end,
-          key_stream_name, nonstop_int
+          key_stream_name, nonstop_int, Number(audio_fade_in) || 0
         ],
         function (err) {
           if (err) {

@@ -385,6 +385,15 @@
                     <div class="absolute left-[2px] top-[2px] w-5 h-5 bg-white rounded-full transition-all peer-checked:translate-x-5"></div>
                   </span>
                 </label>
+                <label class="mt-2 sm:mt-0 inline-flex items-center gap-2" title="Fade the audio in when the broadcast starts. Not repeated on loops or automatic reconnects. Re-encodes the audio (video unchanged).">
+                  <span class="text-sm text-gray-200 flex items-center gap-1"><i class="ti ti-volume text-primary"></i>Fade in audio</span>
+                  <select id="audioFadeIn" class="px-2 py-1 bg-dark-900 border border-gray-600 rounded-lg text-xs text-white focus:border-primary focus:ring-1 focus:ring-primary">
+                    <option value="0">Off</option>
+                    <option value="3">3s</option>
+                    <option value="5">5s</option>
+                    <option value="10">10s</option>
+                  </select>
+                </label>
               </div>
               <p id="nonstopHint" class="hidden text-[11px] text-gray-500">Live Nonstop: the stream loops forever with no end time and restarts itself if it drops. Schedule/Repeat below are disabled.</p>
               <div id="scheduleFieldsGrid" class="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -677,6 +686,15 @@
                       <div class="w-11 h-6 bg-dark-900 border border-gray-600 rounded-full peer peer-checked:bg-primary peer-checked:border-primary"></div>
                       <div class="absolute left-[2px] top-[2px] w-5 h-5 bg-white rounded-full transition-all peer-checked:translate-x-5"></div>
                     </label>
+                <label class="mt-2 sm:mt-0 inline-flex items-center gap-2" title="Fade the audio in when the broadcast starts. Not repeated on loops or automatic reconnects. Re-encodes the audio (video unchanged).">
+                  <span class="text-sm text-gray-200 flex items-center gap-1"><i class="ti ti-volume text-primary"></i>Fade in audio</span>
+                  <select id="ytAudioFadeIn" class="px-2 py-1 bg-dark-900 border border-gray-600 rounded-lg text-xs text-white focus:border-primary focus:ring-1 focus:ring-primary">
+                    <option value="0">Off</option>
+                    <option value="3">3s</option>
+                    <option value="5">5s</option>
+                    <option value="10">10s</option>
+                  </select>
+                </label>
                   </div>
                   <p id="ytNonstopHint" class="hidden text-[11px] text-gray-500 -mt-2">Live Nonstop: loops forever, no end time, restarts itself if it drops. Turns Enable Schedule off.</p>
 
@@ -901,6 +919,15 @@
                     <div class="w-11 h-6 bg-dark-900 border border-gray-600 rounded-full peer peer-checked:bg-primary peer-checked:border-primary"></div>
                     <div class="absolute left-[2px] top-[2px] w-5 h-5 bg-white rounded-full transition-all peer-checked:translate-x-5"></div>
                   </span>
+                </label>
+                <label class="mt-2 sm:mt-0 inline-flex items-center gap-2" title="Fade the audio in when the broadcast starts. Not repeated on loops or automatic reconnects. Re-encodes the audio (video unchanged).">
+                  <span class="text-sm text-gray-200 flex items-center gap-1"><i class="ti ti-volume text-primary"></i>Fade in audio</span>
+                  <select id="editAudioFadeIn" class="px-2 py-1 bg-dark-900 border border-gray-600 rounded-lg text-xs text-white focus:border-primary focus:ring-1 focus:ring-primary">
+                    <option value="0">Off</option>
+                    <option value="3">3s</option>
+                    <option value="5">5s</option>
+                    <option value="10">10s</option>
+                  </select>
                 </label>
               </div>
               <p id="editNonstopHint" class="hidden text-[11px] text-gray-500">Live Nonstop: the stream loops forever with no end time and restarts itself if it drops. Schedule/Repeat below are disabled.</p>
@@ -1195,6 +1222,15 @@
                       <div class="w-11 h-6 bg-dark-900 border border-gray-600 rounded-full peer peer-checked:bg-primary peer-checked:border-primary"></div>
                       <div class="absolute left-[2px] top-[2px] w-5 h-5 bg-white rounded-full transition-all peer-checked:translate-x-5"></div>
                     </label>
+                <label class="mt-2 sm:mt-0 inline-flex items-center gap-2" title="Fade the audio in when the broadcast starts. Not repeated on loops or automatic reconnects. Re-encodes the audio (video unchanged).">
+                  <span class="text-sm text-gray-200 flex items-center gap-1"><i class="ti ti-volume text-primary"></i>Fade in audio</span>
+                  <select id="editYtAudioFadeIn" class="px-2 py-1 bg-dark-900 border border-gray-600 rounded-lg text-xs text-white focus:border-primary focus:ring-1 focus:ring-primary">
+                    <option value="0">Off</option>
+                    <option value="3">3s</option>
+                    <option value="5">5s</option>
+                    <option value="10">10s</option>
+                  </select>
+                </label>
                   </div>
                 </div>
                 <p id="editYtNonstopHint" class="hidden text-[11px] text-gray-500 -mt-2">Live Nonstop: loops forever, no end time, restarts itself if it drops. Turns Enable Schedule off.</p>
@@ -1804,6 +1840,7 @@
 
         const ytNonstop = document.getElementById('ytNonstopMode')?.checked || false;
         ytFormData.nonstop = ytNonstop;
+        ytFormData.audioFadeIn = document.getElementById('ytAudioFadeIn')?.value || '0';
         const enableSchedule = !ytNonstop && document.getElementById('ytEnableSchedule').checked;
         if (enableSchedule) {
           const scheduleStart = document.getElementById('ytScheduleStart').value;
@@ -1927,6 +1964,7 @@
       };
       const nonstopMode = document.getElementById('nonstopMode')?.checked || false;
       formData.nonstop = nonstopMode;
+      formData.audioFadeIn = document.getElementById('audioFadeIn')?.value || '0';
       if (!nonstopMode) {
         const scheduleStartTime = document.getElementById('scheduleStartTime').value;
         const scheduleEndTime = document.getElementById('scheduleEndTime').value;
@@ -3651,6 +3689,10 @@
       }
       const editYtKeyStreamNameEl = document.getElementById('editYtKeyStreamName');
       if (editYtKeyStreamNameEl) editYtKeyStreamNameEl.value = isYoutubeStream ? (stream.key_stream_name || '') : '';
+      ['editAudioFadeIn', 'editYtAudioFadeIn'].forEach(fadeId => {
+        const fadeEl = document.getElementById(fadeId);
+        if (fadeEl) fadeEl.value = String(stream.audio_fade_in || 0);
+      });
       const editNonstopEl = document.getElementById('editNonstopMode');
       if (editNonstopEl) {
         editNonstopEl.checked = !!stream.nonstop;
@@ -4019,6 +4061,7 @@
 
             const editYtNonstop = document.getElementById('editYtNonstopMode')?.checked || false;
             ytFormDataObj.nonstop = editYtNonstop;
+            ytFormDataObj.audioFadeIn = document.getElementById('editYtAudioFadeIn')?.value || '0';
             const enableSchedule = !editYtNonstop && document.getElementById('editYtEnableSchedule').checked;
             if (enableSchedule) {
               ytFormDataObj.scheduleStartTime = document.getElementById('editYtScheduleStart').value;
@@ -4121,6 +4164,7 @@
           };
           const editNonstop = document.getElementById('editNonstopMode')?.checked || false;
           formData.nonstop = editNonstop;
+          formData.audioFadeIn = document.getElementById('editAudioFadeIn')?.value || '0';
           if (editNonstop) {
             formData.scheduleStartTime = '';
             formData.scheduleEndTime = '';

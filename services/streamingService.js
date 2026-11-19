@@ -414,7 +414,41 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
   ];
 }
 
-async function buildFFmpegArgs(stream) {
+/**
+ * Adds a fade-in at the very start of the output audio (afade, seconds).
+ * Audio that was passed through untouched has to be re-encoded for this; the
+ * video keeps its own codec settings.
+ */
+function applyAudioFadeIn(args, seconds) {
+  if (!seconds) return args;
+  const fade = `afade=t=in:st=0:d=${seconds}`;
+  const out = [...args];
+
+  const fcIndex = out.indexOf('-filter_complex');
+  if (fcIndex !== -1) {
+    // Mix mode: fade the mixed result before it is mapped as [aout].
+    out[fcIndex + 1] = out[fcIndex + 1].replace(/\[aout\]$/, `,${fade}[aout]`);
+    return out;
+  }
+
+  const bsfIndex = out.indexOf('-bsf:a');
+  if (bsfIndex !== -1) out.splice(bsfIndex, 2);
+
+  const codecIndex = out.indexOf('-c:a');
+  if (codecIndex !== -1 && out[codecIndex + 1] === 'copy') {
+    out.splice(codecIndex, 2, '-c:a', 'aac', '-b:a', '192k', '-ar', '44100', '-ac', '2');
+  }
+
+  const formatIndex = out.lastIndexOf('-f');
+  out.splice(formatIndex, 0, '-af', fade);
+  return out;
+}
+
+async function buildFFmpegArgs(stream, options = {}) {
+  return applyAudioFadeIn(await buildFFmpegArgsBase(stream), options.audioFadeIn || 0);
+}
+
+async function buildFFmpegArgsBase(stream) {
   const streamWithVideo = await Stream.getStreamWithVideo(stream.id);
 
   if (streamWithVideo && streamWithVideo.video_type === 'playlist') {
@@ -581,6 +615,7 @@ async function startStream(streamId, isRetry = false, baseUrl = null) {
 
     await preflightCopyMode(stream);
 
+    let broadcastReused = false;
     if (stream.is_youtube_api) {
       const youtubeService = require('./youtubeService');
       const effectiveBaseUrl = baseUrl || process.env.BASE_URL || 'http://localhost:7575';
@@ -595,6 +630,7 @@ async function startStream(streamId, isRetry = false, baseUrl = null) {
           return { success: false, error: ytResult.error || 'Failed to create YouTube broadcast' };
         }
         stream = await Stream.findById(streamId);
+        broadcastReused = !!ytResult.reused;
         addStreamLog(streamId, `YouTube broadcast created: ${ytResult.broadcastId}`);
       } catch (ytError) {
         addStreamLog(streamId, `YouTube API error: ${ytError.message}`);
@@ -607,7 +643,13 @@ async function startStream(streamId, isRetry = false, baseUrl = null) {
       return { success: false, error: 'Missing RTMP URL or stream key' };
     }
 
-    const ffmpegArgs = await buildFFmpegArgs(stream);
+    // Fade the audio in only when a broadcast actually begins: not on automatic
+    // reconnects, and not when an app restart picks an already-live broadcast up.
+    const audioFadeIn = (!isRetry && !broadcastReused) ? (Number(stream.audio_fade_in) || 0) : 0;
+    const ffmpegArgs = await buildFFmpegArgs(stream, { audioFadeIn });
+    if (audioFadeIn) {
+      addStreamLog(streamId, `Audio fade-in: ${audioFadeIn}s`);
+    }
 
     addStreamLog(streamId, `Starting FFmpeg process`);
 

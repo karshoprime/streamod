@@ -101,7 +101,19 @@ function parseGain(value) {
  * "Live Nonstop": the stream loops forever with no schedule/duration/repeat.
  * Forces schedule/end/duration/repeat off so the two features never conflict.
  */
+/**
+ * "Fade in audio" option: seconds of audio fade-in when a broadcast starts.
+ * Only 0 (off), 3, 5 or 10 are accepted.
+ */
+function parseAudioFadeIn(value) {
+  const num = parseInt(value, 10);
+  return [3, 5, 10].includes(num) ? num : 0;
+}
+
 function applyNonstopToUpdate(req, updateData) {
+  if (req.body.audioFadeIn !== undefined) {
+    updateData.audio_fade_in = parseAudioFadeIn(req.body.audioFadeIn);
+  }
   if (req.body.nonstop === undefined) return;
   const nonstop = parseBoolField(req.body.nonstop);
   updateData.nonstop = nonstop;
@@ -3738,7 +3750,8 @@ app.post('/api/streams', isAuthenticated, [
       use_advanced_settings: req.body.useAdvancedSettings === 'true' || req.body.useAdvancedSettings === true,
       user_id: req.session.userId,
       key_stream_name: parseKeyStreamName(req.body.keyStreamName),
-      nonstop: parseBoolField(req.body.nonstop)
+      nonstop: parseBoolField(req.body.nonstop),
+      audio_fade_in: parseAudioFadeIn(req.body.audioFadeIn)
     };
     const serverTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     
@@ -3888,7 +3901,8 @@ app.post('/api/streams/youtube', isAuthenticated, uploadThumbnail.single('thumbn
       youtube_localizations: JSON.stringify(localizations),
       youtube_source_language: sourceLanguage,
       key_stream_name: parseKeyStreamName(keyStreamName),
-      nonstop: parseBoolField(nonstop)
+      nonstop: parseBoolField(nonstop),
+      audio_fade_in: parseAudioFadeIn(req.body.audioFadeIn)
     };
 
     if (streamData.nonstop) {
@@ -5179,7 +5193,8 @@ function parseRotationSettings(body) {
       youtube_ad_settings: JSON.stringify(adSettings),
       youtube_localizations: JSON.stringify(localizations),
       youtube_source_language: sourceLanguage,
-      ...(body.key_stream_name !== undefined ? { key_stream_name: parseKeyStreamName(body.key_stream_name) } : {})
+      ...(body.key_stream_name !== undefined ? { key_stream_name: parseKeyStreamName(body.key_stream_name) } : {}),
+      ...(body.audio_fade_in !== undefined ? { audio_fade_in: parseAudioFadeIn(body.audio_fade_in) } : {})
     }
   };
 }

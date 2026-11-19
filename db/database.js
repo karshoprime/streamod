@@ -433,6 +433,9 @@ function createTables() {
         // key stream, plus the "Live Nonstop" flag (loop forever, no schedule).
         ['streams', 'key_stream_name', 'TEXT'],
         ['streams', 'nonstop', 'INTEGER DEFAULT 0'],
+        // --- Fade the audio in over N seconds when a broadcast starts (0 = off).
+        ['streams', 'audio_fade_in', 'INTEGER DEFAULT 0'],
+        ['stream_rotations', 'audio_fade_in', 'INTEGER DEFAULT 0'],
         // --- Playlist audio mixing: 'replace' (default, old behavior - background
         // music replaces the video's own audio) or 'mix' (both are mixed together,
         // each at its own gain).

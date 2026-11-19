@@ -584,7 +584,8 @@ async function createYouTubeBroadcastInner(streamId, baseUrl) {
             rtmpUrl: ingestion.ingestionAddress,
             streamKey: ingestion.streamName,
             broadcastId: stream.youtube_broadcast_id,
-            streamId: stream.youtube_stream_id
+            streamId: stream.youtube_stream_id,
+            reused: true
           };
         }
       }
@@ -627,7 +628,8 @@ async function createYouTubeBroadcastInner(streamId, baseUrl) {
         rtmpUrl: stream.rtmp_url,
         streamKey: stream.stream_key,
         broadcastId: stream.youtube_broadcast_id,
-        streamId: stream.youtube_stream_id
+        streamId: stream.youtube_stream_id,
+        reused: true
       };
     }
   }
